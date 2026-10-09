@@ -1,54 +1,130 @@
-import React, { useEffect, useRef, useState } from "react";
-import { secondsUntil, formatCountdown } from "../../lib/utils";
+import React, { useEffect, useState } from "react";
+import { formatCountdown } from "../../lib/utils";
 import { cn } from "../../lib/cn";
 
-interface CountdownProps {
-  deadline: string; // ISO datetime string
-  onExpire?: () => void;
-  className?: string;
+// ── Shared ticker singleton mechanism ─────────────────────────────────────────
+
+type TickerListener = (now: number) => void;
+const tickerListeners = new Set<TickerListener>();
+let sharedIntervalId: ReturnType<typeof setInterval> | null = null;
+
+function startSharedTicker() {
+  if (sharedIntervalId === null && typeof window !== "undefined") {
+    sharedIntervalId = setInterval(() => {
+      const now = Date.now();
+      tickerListeners.forEach((listener) => listener(now));
+    }, 1000);
+  }
 }
 
-export function Countdown({ deadline, onExpire, className }: CountdownProps) {
-  const [seconds, setSeconds] = useState(() => secondsUntil(deadline));
-  const expiredRef = useRef(false);
+function stopSharedTicker() {
+  if (tickerListeners.size === 0 && sharedIntervalId !== null) {
+    clearInterval(sharedIntervalId);
+    sharedIntervalId = null;
+  }
+}
 
+export function subscribeToSharedTicker(listener: TickerListener): () => void {
+  tickerListeners.add(listener);
+  startSharedTicker();
+  return () => {
+    tickerListeners.delete(listener);
+    stopSharedTicker();
+  };
+}
+
+// ── Countdown component ───────────────────────────────────────────────────────
+
+export interface CountdownProps {
+  deadline?: string | null; // ISO datetime string
+  onExpire?: () => void;
+  className?: string;
+  showSuffix?: boolean; // default true -> " remaining"
+}
+
+export function Countdown({
+  deadline,
+  className,
+  showSuffix = true,
+}: CountdownProps) {
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  // Subscribe to the single shared ticker
   useEffect(() => {
-    expiredRef.current = false;
-    const tick = () => {
-      const s = secondsUntil(deadline);
-      setSeconds(s);
-      if (s === 0 && !expiredRef.current) {
-        expiredRef.current = true;
-        onExpire?.();
+    const unsubscribe = subscribeToSharedTicker((currentNow) => {
+      setNow(currentNow);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Recalculate immediately when the browser tab resumes visibility
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        setNow(Date.now());
       }
     };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [deadline, onExpire]);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
-  const isExpired = seconds === 0;
-  const isUrgent = seconds > 0 && seconds <= 60;
+  // Handle missing or null deadline
+  if (!deadline) {
+    return (
+      <span className={cn("text-xs text-navy-secondary italic", className)}>
+        —
+      </span>
+    );
+  }
+
+  const deadlineTime = new Date(deadline).getTime();
+  // Handle invalid datetime
+  if (Number.isNaN(deadlineTime)) {
+    return (
+      <span className={cn("text-xs text-navy-secondary italic", className)}>
+        —
+      </span>
+    );
+  }
+
+  const secondsRemaining = Math.floor((deadlineTime - now) / 1000);
+  const isExpired = secondsRemaining <= 0;
+  const isUrgent = secondsRemaining > 0 && secondsRemaining <= 60;
+
+  if (isExpired) {
+    return (
+      <span
+        className={cn(
+          "font-mono tabular-nums text-[11px] font-medium text-[#ba1a1a] bg-[#FFF5F5] px-2 py-0.5 rounded border border-[#FCA5A5]",
+          className
+        )}
+        aria-live="polite"
+        role="status"
+      >
+        Deadline passed — awaiting server status
+      </span>
+    );
+  }
+
+  const formatted = formatCountdown(secondsRemaining);
+  const display = showSuffix ? `${formatted} remaining` : formatted;
 
   return (
     <span
       className={cn(
-        "font-mono tabular-nums text-sm font-medium",
-        isExpired
-          ? "text-[#ba1a1a]"
-          : isUrgent
-          ? "text-[#D97706]"
-          : "text-navy",
+        "font-mono tabular-nums text-xs font-semibold px-2 py-0.5 rounded",
+        isUrgent
+          ? "text-[#D97706] bg-[#FEF3C7] border border-[#FCD34D]"
+          : "text-navy bg-surface-container border border-outline-variant",
         className
       )}
       aria-live="polite"
-      aria-label={
-        isExpired
-          ? "Response deadline expired"
-          : `Response deadline in ${formatCountdown(seconds)}`
-      }
+      aria-label={`Response deadline in ${display}`}
+      role="status"
     >
-      {isExpired ? "Expired" : formatCountdown(seconds)}
+      {display}
     </span>
   );
 }

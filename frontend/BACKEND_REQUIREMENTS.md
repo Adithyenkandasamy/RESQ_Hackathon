@@ -68,5 +68,33 @@ This document tracks backend features, endpoints, and schema details needed by t
   - Event `location_updated`: `{ emergency_id: string, lat: number, lng: number, eta_seconds: number }`
 
 - **Channel: `hospital:{hospital_id}`**
-  - Event `request_received`: `HospitalRequestResponse`
-  - Event `request_expired`: `{ request_id: string }`
+  - Event `hospital_request.created`: `{ event_id, event_type, occurred_at, resource_id, data: { request_id, emergency_id, incident_type, response_deadline } }`
+  - Event `hospital_request.accepted`: `{ event_id, event_type, occurred_at, resource_id, data: { request_id, emergency_id, hospital_id } }`
+  - Event `hospital_request.declined`: `{ event_id, event_type, occurred_at, resource_id, data: { request_id, emergency_id, hospital_id, reason } }`
+  - Event `hospital.assigned`: `{ event_id, event_type, occurred_at, resource_id, data: { emergency_id, hospital_id, hospital_name } }`
+  - Event `emergency.status.updated`: `{ event_id, event_type, occurred_at, resource_id, data: { emergency_id, new_status } }`
+  - Event `emergency.handover_confirmed`: `{ event_id, event_type, occurred_at, resource_id, data: { emergency_id, review_status, handover_summary } }`
+  - **Missing Event: `hospital_request.expired`** (Verified Gap):
+    - *Status*: The backend sets `status = EXPIRED` lazily only when staff attempts to accept after deadline. No background task transitions requests upon deadline passage, and no `hospital_request.expired` Socket.IO event is emitted.
+    - *Frontend Mitigation*: The frontend Countdown displays `"Deadline passed — awaiting server status"` without mutating local state, while waiting for authoritative server status via 15s polling fallback.
+    - *Suggested Contract*: Background task periodically checks expired deadlines, transitions `HospitalRequest.status = EXPIRED`, and emits `hospital_request.expired` with payload `{ event_id: str, event_type: "hospital_request.expired", resource_id: str(request_id), data: { request_id: str, emergency_id: str, hospital_id: str, expired_at: str } }` to rooms `hospital:{hospital_id}` and `admin`.
+
+---
+
+### 4. Hospital Dashboard Aggregate Metrics Endpoint
+
+- **`GET /api/v1/hospitals/me/dashboard`**
+  - **Auth**: `HOSPITAL_STAFF`
+  - **Purpose**: Current frontend computes metrics (`pending_requests`, `accepted_requests`, `expired_requests`, `active_assigned_cases`) by client-side aggregation of `GET /api/v1/hospital-requests` and `GET /api/v1/emergencies`. While functional, an aggregate endpoint will optimize performance as historical request counts scale.
+  - **Suggested Response**:
+    ```json
+    {
+      "hospital_id": "UUID",
+      "pending_requests_count": 2,
+      "accepted_requests_count": 5,
+      "expired_requests_count": 1,
+      "active_assigned_cases_count": 3,
+      "is_accepting_patients": true
+    }
+    ```
+
