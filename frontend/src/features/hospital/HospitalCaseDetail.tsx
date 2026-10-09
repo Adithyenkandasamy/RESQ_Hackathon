@@ -114,6 +114,20 @@ export function HospitalCaseDetail() {
             </p>
           </div>
 
+          {/* Patient / Trauma Scene Photo */}
+          {((patientInfo as any)?.image_url || ((patientInfo as any)?.images && (patientInfo as any).images[0])) && (
+            <div className="rounded-md border border-outline-variant bg-surface p-3">
+              <span className="text-xs font-bold text-navy block mb-2">
+                📷 Patient / Trauma Scene Photograph Transmitted from Field:
+              </span>
+              <img
+                src={(patientInfo as any)?.image_url || (patientInfo as any).images[0]}
+                alt="Patient / Scene trauma photo"
+                className="max-h-80 rounded-md border border-outline-variant object-contain shadow-xs bg-black/5"
+              />
+            </div>
+          )}
+
           {/* Audio Transcript (ElevenLabs) */}
           {transcript && (
             <div className="rounded-md bg-surface p-3.5 border border-outline-variant">

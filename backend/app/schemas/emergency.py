@@ -17,10 +17,10 @@ class EmergencyCreate(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     incident_type: str = Field(
-        ..., min_length=2, max_length=100, description="Type of incident (e.g. TRAUMA, CARDIAC)"
+        default="EMERGENCY", min_length=2, max_length=100, description="Type of incident (e.g. TRAUMA, CARDIAC, EMERGENCY)"
     )
     incident_description: str | None = Field(
-        None, max_length=1000, description="Optional incident description from caller or scene"
+        None, max_length=4000, description="Incident description or patient condition from caller or scene"
     )
     patient_info: dict[str, Any] = Field(
         default_factory=dict,

@@ -688,8 +688,9 @@ export function HospitalDashboard() {
                         <StatusBadge type="emergency" status={caseItem.status} />
                       </td>
                       <td className="py-3 px-4 text-navy-secondary font-mono">
-                        {caseItem.incident_latitude.toFixed(4)},{" "}
-                        {caseItem.incident_longitude.toFixed(4)}
+                        {caseItem.incident_latitude != null && caseItem.incident_longitude != null
+                          ? `${caseItem.incident_latitude.toFixed(4)}, ${caseItem.incident_longitude.toFixed(4)}`
+                          : "Unavailable"}
                       </td>
                       <td className="py-3 px-4 text-navy-secondary">
                         {formatDateTime(caseItem.created_at)}

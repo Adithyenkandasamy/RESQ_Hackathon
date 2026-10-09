@@ -8,12 +8,14 @@ import {
   Platform,
   Alert,
   ScrollView,
+  TextInput,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEmergency } from '../../context/EmergencyContext';
 import { LocationService } from '../../services/location';
-import { EmergencySeverity } from '../../types/emergency';
+import { MediaService, CapturedImage } from '../../services/media';
 import { AppInput } from '../../components/AppInput';
 import { AppButton } from '../../components/AppButton';
 import { Colors } from '../../constants/colors';
@@ -23,21 +25,14 @@ import {
   MapPin,
   RefreshCw,
   X,
-  AlertTriangle,
-  Flame,
-  Clock,
   HeartPulse,
+  Camera,
+  ImageIcon,
+  Mic,
+  Square,
+  Activity,
+  Trash2,
 } from 'lucide-react-native';
-
-const PRESET_EMERGENCIES = [
-  'Cardiac Arrest / Chest Pain',
-  'Severe Trauma / Accident',
-  'Acute Respiratory Distress',
-  'Suspected Stroke',
-  'Unresponsive / Loss of Consciousness',
-];
-
-const PATIENT_PRESETS = ['Male Adult', 'Female Adult', 'Child / Pediatric', 'Unknown'];
 
 export default function CreateEmergencyScreen() {
   const router = useRouter();
@@ -50,16 +45,21 @@ export default function CreateEmergencyScreen() {
   // Read cached GPS from continuous tracking service
   const initialLoc = LocationService.getCachedLocation();
 
-  // Minimal Emergency Fields
-  const [severity, setSeverity] = useState<EmergencySeverity>('CRITICAL');
-  const [chiefComplaint, setChiefComplaint] = useState('Cardiac Arrest / Chest Pain');
-  const [patientDemographic, setPatientDemographic] = useState('Unknown');
+  // 1. Single Clinical Narrative (Chat / Text or Voice)
+  const [patientCondition, setPatientCondition] = useState('');
 
-  // Ambulance Device Location (Physical Vehicle)
+  // 2. Patient / Scene Photo
+  const [capturedImage, setCapturedImage] = useState<CapturedImage | null>(null);
+
+  // 3. Voice Dictation State
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordDuration, setRecordDuration] = useState(0);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [recordTimer, setRecordTimer] = useState<any>(null);
+
+  // 4. GPS & Scene Location
   const [ambulanceLat, setAmbulanceLat] = useState<number | null>(initialLoc?.latitude ?? null);
   const [ambulanceLng, setAmbulanceLng] = useState<number | null>(initialLoc?.longitude ?? null);
-
-  // Incident Scene Location (Where Emergency Occurred)
   const [incidentAtAmbulanceLocation, setIncidentAtAmbulanceLocation] = useState(true);
   const [sceneAddress, setSceneAddress] = useState('');
   const [sceneLat, setSceneLat] = useState<number | null>(initialLoc?.latitude ?? null);
@@ -70,7 +70,6 @@ export default function CreateEmergencyScreen() {
       : 'Acquiring GPS...'
   );
 
-  // Auto-acquire fresh GPS coordinates on mount
   useEffect(() => {
     fetchCurrentGPS();
   }, []);
@@ -108,33 +107,101 @@ export default function CreateEmergencyScreen() {
     }
   };
 
+  // Camera capture
+  const handleTakePhoto = async () => {
+    try {
+      const photo = await MediaService.takePhoto();
+      if (photo) {
+        setCapturedImage(photo);
+      }
+    } catch (e: any) {
+      Alert.alert('Camera Error', e.message || 'Could not take photo.');
+    }
+  };
+
+  // Gallery picker
+  const handlePickImage = async () => {
+    try {
+      const photo = await MediaService.pickImageFromLibrary();
+      if (photo) {
+        setCapturedImage(photo);
+      }
+    } catch (e: any) {
+      Alert.alert('Photo Picker Error', e.message || 'Could not access photo library.');
+    }
+  };
+
+  // Voice recording & dictation
+  const startVoiceDictation = async () => {
+    const started = await MediaService.startAudioRecording();
+    if (started) {
+      setIsRecording(true);
+      setRecordDuration(0);
+      const timer = setInterval(() => {
+        setRecordDuration((prev) => prev + 1);
+      }, 1000);
+      setRecordTimer(timer);
+    } else {
+      Alert.alert('Microphone Error', 'Could not access microphone.');
+    }
+  };
+
+  const stopVoiceDictation = async () => {
+    if (recordTimer) {
+      clearInterval(recordTimer);
+      setRecordTimer(null);
+    }
+    setIsRecording(false);
+    setIsTranscribing(true);
+
+    try {
+      const audioResult = await MediaService.stopAudioRecording();
+      if (audioResult) {
+        // Append voice note indicator into text
+        const voiceTag = `[Voice Note (${recordDuration}s recorded)]`;
+        setPatientCondition((prev) => (prev ? `${prev}\n${voiceTag}` : voiceTag));
+      }
+    } catch (e: any) {
+      Alert.alert('Audio Error', e.message || 'Could not process audio.');
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
   const handleDispatch = async () => {
     if (loading) return;
     setLoading(true);
 
     try {
-      const capabilities: string[] = [];
-      if (severity === 'CRITICAL') {
-        capabilities.push('trauma_center', 'icu');
-      }
-
       const finalLat = incidentAtAmbulanceLocation ? sceneLat : sceneLat;
       const finalLng = incidentAtAmbulanceLocation ? sceneLng : sceneLng;
       const sceneDesc = incidentAtAmbulanceLocation
         ? (sceneAddress.trim() ? `${sceneAddress.trim()} (at unit GPS)` : `Scene @ ${locationLabel}`)
-        : (sceneAddress.trim() || 'Field Emergency Scene (coordinates pending)');
+        : (sceneAddress.trim() || 'Field Emergency Scene');
+
+      const narrative = patientCondition.trim() || 'Immediate patient triage intake';
+
+      // Build patient info with single narrative and attached photo
+      const patientInfo: Record<string, any> = {
+        condition_description: narrative,
+      };
+
+      if (capturedImage?.base64) {
+        const dataUrl = `data:image/jpeg;base64,${capturedImage.base64}`;
+        patientInfo.image_url = dataUrl;
+        patientInfo.images = [dataUrl];
+      } else if (capturedImage?.uri) {
+        patientInfo.image_url = capturedImage.uri;
+        patientInfo.images = [capturedImage.uri];
+      }
 
       await createEmergency({
-        severity_level: severity,
-        location_description: sceneDesc,
+        incident_type: 'EMERGENCY',
+        location_description: narrative,
         incident_latitude: finalLat ?? undefined,
         incident_longitude: finalLng ?? undefined,
-        required_capabilities: capabilities,
-        patient_info: {
-          chief_complaint: chiefComplaint.trim() || 'Acute emergency',
-          gender: patientDemographic.includes('Female') ? 'Female' : patientDemographic.includes('Male') ? 'Male' : undefined,
-          transport_priority: severity,
-        },
+        required_capabilities: ['trauma_center', 'icu'],
+        patient_info: patientInfo,
       });
 
       router.replace('/emergency/active');
@@ -158,11 +225,11 @@ export default function CreateEmergencyScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.fixedScreen}
     >
-      {/* Top Header with Safe Area Inset */}
+      {/* Top Header */}
       <View style={[styles.topHeader, { paddingTop: safeTop + 10 }]}>
         <View>
           <Text style={styles.screenTitle}>Rapid Emergency Dispatch</Text>
-          <Text style={styles.screenSubtitle}>Instant 1-Tap Hospital Coordination</Text>
+          <Text style={styles.screenSubtitle}>Pass condition & photo — save life immediately</Text>
         </View>
         <TouchableOpacity
           style={styles.closeBtn}
@@ -178,9 +245,9 @@ export default function CreateEmergencyScreen() {
         keyboardShouldPersistTaps="handled"
         bounces={false}
       >
-        {/* Incident Scene Location Configuration */}
+        {/* Incident Scene Location */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>INCIDENT SCENE LOCATION</Text>
+          <Text style={styles.sectionLabel}>INCIDENT LOCATION</Text>
           <View style={styles.locationToggleRow}>
             <TouchableOpacity
               style={[
@@ -213,7 +280,7 @@ export default function CreateEmergencyScreen() {
                   !incidentAtAmbulanceLocation && styles.locToggleTextActive,
                 ]}
               >
-                Different Location / Address
+                Different Area / Landmark
               </Text>
             </TouchableOpacity>
           </View>
@@ -238,142 +305,112 @@ export default function CreateEmergencyScreen() {
           ) : (
             <View style={{ marginTop: Spacing.xs }}>
               <AppInput
-                placeholder="Enter scene address, junction, or landmark..."
+                placeholder="Enter area, junction, or landmark..."
                 value={sceneAddress}
                 onChangeText={setSceneAddress}
                 style={styles.inputField}
               />
-              <Text style={[Typography.caption, { color: Colors.secondaryText, marginTop: 4 }]}>
-                {sceneLat && sceneLng
-                  ? `Scene Coords: ${sceneLat.toFixed(4)}, ${sceneLng.toFixed(4)}`
-                  : 'Coordinates: Unrecorded (text location will be used)'}
-              </Text>
             </View>
           )}
         </View>
 
-        {/* 1-Tap Severity Selector */}
+        {/* ── Core Patient Condition Narrative (Chat & Voice) ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>TRIAGE PRIORITY</Text>
-          <View style={styles.severityRow}>
-            <TouchableOpacity
-              style={[
-                styles.severityBtn,
-                styles.severityCritical,
-                severity === 'CRITICAL' && styles.severityCriticalActive,
-              ]}
-              onPress={() => setSeverity('CRITICAL')}
-              activeOpacity={0.8}
-            >
-              <Flame
-                size={18}
-                color={severity === 'CRITICAL' ? '#FFFFFF' : Colors.error}
-              />
-              <Text
-                style={[
-                  styles.severityText,
-                  { color: severity === 'CRITICAL' ? '#FFFFFF' : Colors.error },
-                ]}
-              >
-                CRITICAL
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.severityBtn,
-                styles.severityUrgent,
-                severity === 'URGENT' && styles.severityUrgentActive,
-              ]}
-              onPress={() => setSeverity('URGENT')}
-              activeOpacity={0.8}
-            >
-              <AlertTriangle
-                size={18}
-                color={severity === 'URGENT' ? '#FFFFFF' : Colors.warning}
-              />
-              <Text
-                style={[
-                  styles.severityText,
-                  { color: severity === 'URGENT' ? '#FFFFFF' : Colors.warning },
-                ]}
-              >
-                URGENT
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.severityBtn,
-                styles.severityStandard,
-                severity === 'STANDARD' && styles.severityStandardActive,
-              ]}
-              onPress={() => setSeverity('STANDARD')}
-              activeOpacity={0.8}
-            >
-              <Clock
-                size={18}
-                color={severity === 'STANDARD' ? '#FFFFFF' : Colors.primaryBlue}
-              />
-              <Text
-                style={[
-                  styles.severityText,
-                  { color: severity === 'STANDARD' ? '#FFFFFF' : Colors.primaryBlue },
-                ]}
-              >
-                STANDARD
-              </Text>
-            </TouchableOpacity>
+          <View style={styles.sectionHeaderRow}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Activity size={16} color={Colors.primaryBlue} />
+              <Text style={styles.sectionLabel}>PATIENT CONDITION & INTAKE DETAILS</Text>
+            </View>
+            <View style={styles.realtimeBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.realtimeText}>TRANSMITS TO HOSPITALS</Text>
+            </View>
           </View>
-        </View>
+          <Text style={styles.helperText}>
+            Type patient condition, name or area if known, or speak hands-free. No complex forms required.
+          </Text>
 
-        {/* Chief Complaint & Quick Chips */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>CHIEF COMPLAINT / INCIDENT</Text>
-          <View style={styles.chipsContainer}>
-            {PRESET_EMERGENCIES.map((preset) => {
-              const isSelected = chiefComplaint === preset;
-              return (
-                <TouchableOpacity
-                  key={preset}
-                  style={[styles.chip, isSelected && styles.chipActive]}
-                  onPress={() => setChiefComplaint(preset)}
-                >
-                  <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                    {preset}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          <AppInput
-            placeholder="Or type specific notes (e.g. Unconscious at junction)"
-            value={chiefComplaint}
-            onChangeText={setChiefComplaint}
-            style={styles.inputField}
+          <TextInput
+            style={styles.narrativeInput}
+            multiline
+            numberOfLines={4}
+            placeholder="e.g. Male approx 35, accident near Anna Nagar junction. Severe head trauma, bleeding, unconscious, breathing fast. Urgent trauma ICU needed..."
+            placeholderTextColor={Colors.secondaryText}
+            value={patientCondition}
+            onChangeText={setPatientCondition}
           />
+
+          {/* Voice Dictation Bar */}
+          <View style={styles.voiceBar}>
+            {isRecording ? (
+              <TouchableOpacity
+                style={styles.recordingBtn}
+                onPress={stopVoiceDictation}
+                activeOpacity={0.8}
+              >
+                <Square size={16} color="#FFFFFF" />
+                <Text style={styles.recordingBtnText}>
+                  Stop Dictation ({recordDuration}s)
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.dictateBtn}
+                onPress={startVoiceDictation}
+                disabled={isTranscribing}
+                activeOpacity={0.8}
+              >
+                <Mic size={16} color={Colors.primaryBlue} />
+                <Text style={styles.dictateBtnText}>
+                  {isTranscribing ? 'Processing...' : 'Speak / Record Voice'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
-        {/* Patient Demographic (Quick Chips) */}
+        {/* ── Patient / Scene Photo Attachment ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>PATIENT DEMOGRAPHIC (OPTIONAL)</Text>
-          <View style={styles.chipsRow}>
-            {PATIENT_PRESETS.map((demo) => {
-              const isSelected = patientDemographic === demo;
-              return (
-                <TouchableOpacity
-                  key={demo}
-                  style={[styles.smallChip, isSelected && styles.smallChipActive]}
-                  onPress={() => setPatientDemographic(demo)}
-                >
-                  <Text style={[styles.smallChipText, isSelected && styles.smallChipTextActive]}>
-                    {demo}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <Text style={styles.sectionLabel}>PATIENT / SCENE PHOTO</Text>
+          <Text style={styles.helperText}>
+            Attach image of patient condition or trauma scene for receiving emergency doctors.
+          </Text>
+
+          {capturedImage ? (
+            <View style={styles.imagePreviewBox}>
+              <Image source={{ uri: capturedImage.uri }} style={styles.imageThumbnail} />
+              <View style={styles.imageDetails}>
+                <Text style={styles.imageSuccessText}>✓ Image Attached</Text>
+                <Text style={styles.imageSubtext}>Will be transmitted live to hospital triage bay</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.deletePhotoBtn}
+                onPress={() => setCapturedImage(null)}
+              >
+                <Trash2 size={16} color={Colors.error} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.photoActionsRow}>
+              <TouchableOpacity
+                style={styles.photoActionBtn}
+                onPress={handleTakePhoto}
+                activeOpacity={0.8}
+              >
+                <Camera size={18} color={Colors.primaryBlue} />
+                <Text style={styles.photoActionText}>Take Camera Photo</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.photoActionBtn}
+                onPress={handlePickImage}
+                activeOpacity={0.8}
+              >
+                <ImageIcon size={18} color={Colors.primaryBlue} />
+                <Text style={styles.photoActionText}>Pick from Gallery</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -425,6 +462,151 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: Spacing.base,
+    paddingBottom: 40,
+  },
+  section: {
+    marginBottom: Spacing.lg,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  sectionLabel: {
+    ...Typography.caption,
+    fontWeight: '700',
+    color: Colors.secondaryText,
+    letterSpacing: 0.5,
+  },
+  helperText: {
+    ...Typography.caption,
+    color: Colors.secondaryText,
+    marginBottom: Spacing.sm,
+  },
+  realtimeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
+    gap: 4,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#16A34A',
+  },
+  realtimeText: {
+    ...Typography.caption,
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#16A34A',
+    letterSpacing: 0.5,
+  },
+  narrativeInput: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1.5,
+    borderColor: 'rgba(37, 99, 235, 0.3)',
+    padding: Spacing.md,
+    ...Typography.body,
+    fontSize: 14,
+    color: Colors.primaryText,
+    minHeight: 110,
+    textAlignVertical: 'top',
+    ...Shadows.card,
+  },
+  voiceBar: {
+    marginTop: Spacing.sm,
+  },
+  dictateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.lightBlue,
+    borderWidth: 1,
+    borderColor: 'rgba(37, 99, 235, 0.3)',
+    gap: 6,
+  },
+  dictateBtnText: {
+    ...Typography.caption,
+    fontWeight: '700',
+    color: Colors.primaryBlue,
+  },
+  recordingBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.error,
+    gap: 6,
+  },
+  recordingBtnText: {
+    ...Typography.caption,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  photoActionsRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  photoActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.cardBackground,
+    borderWidth: 1.5,
+    borderColor: Colors.borders,
+    gap: 8,
+    ...Shadows.card,
+  },
+  photoActionText: {
+    ...Typography.caption,
+    fontWeight: '700',
+    color: Colors.primaryBlue,
+  },
+  imagePreviewBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.cardBackground,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.medicalGreen,
+  },
+  imageThumbnail: {
+    width: 64,
+    height: 64,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.borders,
+  },
+  imageDetails: {
+    flex: 1,
+    marginLeft: Spacing.md,
+  },
+  imageSuccessText: {
+    ...Typography.bodySmall,
+    fontWeight: '700',
+    color: Colors.medicalGreen,
+  },
+  imageSubtext: {
+    ...Typography.caption,
+    color: Colors.secondaryText,
+    marginTop: 2,
+  },
+  deletePhotoBtn: {
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    backgroundColor: '#FEF2F2',
   },
   locationToggleRow: {
     flexDirection: 'row',
@@ -463,7 +645,6 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.md,
-    marginBottom: Spacing.md,
     borderWidth: 1,
     borderColor: 'rgba(37, 99, 235, 0.2)',
   },
@@ -491,115 +672,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginLeft: 4,
   },
-  section: {
-    marginBottom: Spacing.md,
-  },
-  sectionLabel: {
-    ...Typography.caption,
-    fontWeight: '700',
-    color: Colors.secondaryText,
-    letterSpacing: 0.5,
-    marginBottom: Spacing.xs,
-  },
-  severityRow: {
-    flexDirection: 'row',
-    gap: Spacing.xs,
-  },
-  severityBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1.5,
-    gap: 6,
-  },
-  severityCritical: {
-    backgroundColor: '#FEF2F2',
-    borderColor: 'rgba(220, 38, 38, 0.3)',
-  },
-  severityCriticalActive: {
-    backgroundColor: Colors.error,
-    borderColor: Colors.error,
-  },
-  severityUrgent: {
-    backgroundColor: '#FFFBEB',
-    borderColor: 'rgba(217, 119, 6, 0.3)',
-  },
-  severityUrgentActive: {
-    backgroundColor: Colors.warning,
-    borderColor: Colors.warning,
-  },
-  severityStandard: {
-    backgroundColor: Colors.lightBlue,
-    borderColor: 'rgba(37, 99, 235, 0.3)',
-  },
-  severityStandardActive: {
-    backgroundColor: Colors.primaryBlue,
-    borderColor: Colors.primaryBlue,
-  },
-  severityText: {
-    ...Typography.button,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  chipsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: Spacing.xs,
-  },
-  chip: {
-    backgroundColor: Colors.cardBackground,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: BorderRadius.sm,
-    borderWidth: 1,
-    borderColor: Colors.borders,
-  },
-  chipActive: {
-    backgroundColor: Colors.lightBlue,
-    borderColor: Colors.primaryBlue,
-  },
-  chipText: {
-    ...Typography.caption,
-    color: Colors.primaryText,
-    fontWeight: '500',
-  },
-  chipTextActive: {
-    color: Colors.primaryBlue,
-    fontWeight: '700',
-  },
   inputField: {
     marginTop: Spacing.xs,
-  },
-  chipsRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  smallChip: {
-    flex: 1,
-    alignItems: 'center',
-    backgroundColor: Colors.cardBackground,
-    paddingVertical: 8,
-    borderRadius: BorderRadius.sm,
-    borderWidth: 1,
-    borderColor: Colors.borders,
-  },
-  smallChipActive: {
-    backgroundColor: Colors.lightGreen,
-    borderColor: Colors.medicalGreen,
-  },
-  smallChipText: {
-    ...Typography.caption,
-    color: Colors.primaryText,
-    fontWeight: '500',
-    fontSize: 11,
-  },
-  smallChipTextActive: {
-    color: Colors.medicalGreen,
-    fontWeight: '700',
   },
   bottomBar: {
     padding: Spacing.base,

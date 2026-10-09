@@ -103,8 +103,9 @@ function IncidentSection({ emergency }: { emergency: EmergencyResponse }) {
             Location (lat, lng)
           </dt>
           <dd className="text-[13px] text-navy mt-0.5 font-mono">
-            {emergency.incident_latitude.toFixed(6)},{" "}
-            {emergency.incident_longitude.toFixed(6)}
+            {emergency.incident_latitude != null && emergency.incident_longitude != null
+              ? `${emergency.incident_latitude.toFixed(6)}, ${emergency.incident_longitude.toFixed(6)}`
+              : "Unavailable"}
           </dd>
         </div>
         <div>

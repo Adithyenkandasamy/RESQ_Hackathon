@@ -155,8 +155,9 @@ export function HospitalCaseList() {
       header: "Location (lat, lng)",
       render: (row: EmergencyResponse) => (
         <span className="text-navy-secondary text-[13px]">
-          {row.incident_latitude.toFixed(4)},{" "}
-          {row.incident_longitude.toFixed(4)}
+          {row.incident_latitude != null && row.incident_longitude != null
+            ? `${row.incident_latitude.toFixed(4)}, ${row.incident_longitude.toFixed(4)}`
+            : "Unavailable"}
         </span>
       ),
     },

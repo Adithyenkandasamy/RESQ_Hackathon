@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class TranscriptionResponse(BaseModel):
@@ -21,11 +21,19 @@ class TranscriptionResponse(BaseModel):
 class ExtractionRequest(BaseModel):
     """Optional payload to extract observations from user-provided text instead of stored transcript."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     text: str | None = Field(
         None, max_length=5000, description="Raw text or scene notes to extract observations from"
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_text_input(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "text" not in data and "transcription_text" in data:
+                data["text"] = data["transcription_text"]
+        return data
 
 
 class ObservationExtractionResponse(BaseModel):

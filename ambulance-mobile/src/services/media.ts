@@ -13,6 +13,7 @@ function getAudio() {
 
 export interface CapturedImage {
   uri: string;
+  base64?: string;
   width?: number;
   height?: number;
   fileName?: string;
@@ -43,13 +44,15 @@ export const MediaService = {
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         allowsEditing: false,
-        quality: 0.8,
+        quality: 0.6,
+        base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
         return {
           uri: asset.uri,
+          base64: asset.base64 || undefined,
           width: asset.width,
           height: asset.height,
           fileName: asset.fileName || 'scene_photo.jpg',
@@ -68,13 +71,15 @@ export const MediaService = {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: false,
-        quality: 0.8,
+        quality: 0.6,
+        base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
         return {
           uri: asset.uri,
+          base64: asset.base64 || undefined,
           width: asset.width,
           height: asset.height,
           fileName: asset.fileName || 'scene_photo.jpg',
