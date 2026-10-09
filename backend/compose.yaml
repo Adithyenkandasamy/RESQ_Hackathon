@@ -1,0 +1,33 @@
+# ─────────────────────────────────────────────────────────
+# compose.yaml — Local development
+# ─────────────────────────────────────────────────────────
+# Starts the FastAPI backend for local development.
+#
+# NOTE: This does NOT include a local PostgreSQL container.
+# The application will start without a database (health/ready
+# will report no DB configured).  To connect to Aiven PostgreSQL,
+# set DATABASE_URL in your .env file.
+#
+# Usage:
+#   docker compose up --build
+# ─────────────────────────────────────────────────────────
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=development
+    # Override CMD for dev (single worker + reload).
+    command:
+      [
+        "uv", "run", "uvicorn", "app.main:app",
+        "--host", "0.0.0.0",
+        "--port", "8000",
+        "--reload",
+      ]
