@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 import app.models  # noqa: F401
 from app.config import get_settings
-from app.database import Base, _normalize_database_url
+from app.database import Base, _build_connect_args, _normalize_database_url
 
 # Alembic Config object.
 config = context.config
@@ -59,10 +59,12 @@ def do_run_migrations(connection: Connection) -> None:
 
 async def run_async_migrations() -> None:
     """Create an async engine and run migrations online."""
+    connect_args = _build_connect_args(settings.DATABASE_URL)
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
 
     async with connectable.connect() as connection:

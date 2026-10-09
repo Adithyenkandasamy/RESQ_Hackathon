@@ -37,36 +37,46 @@ _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
 def _normalize_database_url(url: str) -> str:
-    """Ensure the URL uses a scheme compatible with SQLAlchemy + asyncpg.
-
-    Aiven may provide URLs starting with ``postgres://`` or
-    ``postgresql://``.  SQLAlchemy's async driver requires
-    ``postgresql+asyncpg://``.
-
-    Query parameters (including ``ssl=require``) are preserved intact.
-    """
+    """Ensure the URL uses a scheme compatible with SQLAlchemy + asyncpg."""
     if url.startswith("postgres://"):
         url = "postgresql+asyncpg://" + url[len("postgres://") :]
     elif url.startswith("postgresql://"):
         url = "postgresql+asyncpg://" + url[len("postgresql://") :]
     elif url.startswith("postgresql+asyncpg://"):
-        pass  # already correct
-    # Leave anything else (e.g. sqlite+aiosqlite://) as-is for tests.
+        pass
+
+    # asyncpg handles SSL via connect_args, not as session parameters in query string
+    if "postgresql+asyncpg://" in url and ("ssl=" in url or "sslmode=" in url):
+        from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+
+        parsed = urlparse(url)
+        query_params = parse_qs(parsed.query)
+        query_params.pop("ssl", None)
+        query_params.pop("sslmode", None)
+        new_query = urlencode(query_params, doseq=True)
+        url = urlunparse(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                parsed.params,
+                new_query,
+                parsed.fragment,
+            )
+        )
+
     return url
 
 
 def _build_connect_args(url: str) -> dict[str, Any]:
-    """Build SSL / connect args appropriate for the database URL.
-
-    If the URL contains ``ssl=require`` (Aiven's default), we configure
-    asyncpg to connect with TLS *with certificate verification enabled*.
-    """
+    """Build SSL / connect args appropriate for the database URL."""
     import ssl as _ssl
 
     connect_args: dict[str, Any] = {}
-    if "ssl=require" in url or "sslmode=require" in url:
+    if "ssl=require" in url or "sslmode=require" in url or "aivencloud.com" in url:
         ssl_ctx = _ssl.create_default_context()
-        # Aiven uses a publicly-trusted CA; default verification is fine.
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = _ssl.CERT_NONE
         connect_args["ssl"] = ssl_ctx
     return connect_args
 
