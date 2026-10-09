@@ -7,16 +7,18 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     DateTime,
-    Enum as SAEnum,
     Float,
     ForeignKey,
     Index,
-    JSON,
     String,
     Text,
     Uuid,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -85,9 +87,7 @@ class Emergency(Base):
     )
 
     # Relationships
-    creator: Mapped[User] = relationship(
-        "User", back_populates="created_emergencies"
-    )
+    creator: Mapped[User] = relationship("User", back_populates="created_emergencies")
     assigned_ambulance: Mapped[Ambulance | None] = relationship(
         "Ambulance", back_populates="assigned_emergencies"
     )

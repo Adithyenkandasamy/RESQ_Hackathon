@@ -1,0 +1,1906 @@
+{
+  "components": {
+    "schemas": {
+      "AdminDashboardResponse": {
+        "description": "Aggregated operational dashboard metrics for administrators.\n\nDoes not expose sensitive patient-identifiable data.",
+        "properties": {
+          "active_emergencies": {
+            "description": "Count of non-terminal emergencies",
+            "title": "Active Emergencies",
+            "type": "integer"
+          },
+          "available_ambulances": {
+            "description": "Count of operational AVAILABLE ambulances",
+            "title": "Available Ambulances",
+            "type": "integer"
+          },
+          "emergencies_by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Breakdown of emergency counts by status",
+            "title": "Emergencies By Status",
+            "type": "object"
+          },
+          "total_ambulances": {
+            "description": "Count of registered ambulances",
+            "title": "Total Ambulances",
+            "type": "integer"
+          },
+          "total_hospitals": {
+            "description": "Count of registered hospitals",
+            "title": "Total Hospitals",
+            "type": "integer"
+          },
+          "total_users": {
+            "description": "Count of active user accounts",
+            "title": "Total Users",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_hospitals",
+          "total_ambulances",
+          "available_ambulances",
+          "active_emergencies",
+          "emergencies_by_status",
+          "total_users"
+        ],
+        "title": "AdminDashboardResponse",
+        "type": "object"
+      },
+      "AmbulanceAvailabilityUpdate": {
+        "additionalProperties": false,
+        "description": "Payload to update operational availability.",
+        "properties": {
+          "operational_status": {
+            "$ref": "#/components/schemas/AmbulanceStatus",
+            "description": "New operational status (AVAILABLE, BUSY, EN_ROUTE, OUT_OF_SERVICE)"
+          }
+        },
+        "required": [
+          "operational_status"
+        ],
+        "title": "AmbulanceAvailabilityUpdate",
+        "type": "object"
+      },
+      "AmbulanceResponse": {
+        "description": "Ambulance profile response.",
+        "properties": {
+          "contact_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Number"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "operational_status": {
+            "$ref": "#/components/schemas/AmbulanceStatus"
+          },
+          "registration_identifier": {
+            "title": "Registration Identifier",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "registration_identifier",
+          "operational_status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AmbulanceResponse",
+        "type": "object"
+      },
+      "AmbulanceStatus": {
+        "description": "Operational status of an ambulance.",
+        "enum": [
+          "AVAILABLE",
+          "BUSY",
+          "EN_ROUTE",
+          "OUT_OF_SERVICE"
+        ],
+        "title": "AmbulanceStatus",
+        "type": "string"
+      },
+      "EmergencyCreate": {
+        "additionalProperties": false,
+        "description": "Payload to register a new emergency incident.",
+        "properties": {
+          "assigned_ambulance_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional ambulance assigned at creation (admin override)",
+            "title": "Assigned Ambulance Id"
+          },
+          "incident_description": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional incident description from caller or scene",
+            "title": "Incident Description"
+          },
+          "incident_latitude": {
+            "description": "Latitude between -90 and 90",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Incident Latitude",
+            "type": "number"
+          },
+          "incident_longitude": {
+            "description": "Longitude between -180 and 180",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Incident Longitude",
+            "type": "number"
+          },
+          "incident_type": {
+            "description": "Type of incident (e.g. TRAUMA, CARDIAC)",
+            "maxLength": 100,
+            "minLength": 2,
+            "title": "Incident Type",
+            "type": "string"
+          },
+          "location_captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Timestamp when coordinates were acquired; defaults to now",
+            "title": "Location Captured At"
+          },
+          "patient_info": {
+            "additionalProperties": true,
+            "description": "Scene patient observations; unknown details permitted, no diagnosis required",
+            "title": "Patient Info",
+            "type": "object"
+          }
+        },
+        "required": [
+          "incident_type",
+          "incident_latitude",
+          "incident_longitude"
+        ],
+        "title": "EmergencyCreate",
+        "type": "object"
+      },
+      "EmergencyHistoryResponse": {
+        "description": "Audit log entry for an emergency.",
+        "properties": {
+          "actor_user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor User Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "emergency_id": {
+            "format": "uuid",
+            "title": "Emergency Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "new_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Status"
+          },
+          "previous_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Status"
+          }
+        },
+        "required": [
+          "id",
+          "emergency_id",
+          "event_type",
+          "created_at"
+        ],
+        "title": "EmergencyHistoryResponse",
+        "type": "object"
+      },
+      "EmergencyLocationUpdate": {
+        "additionalProperties": false,
+        "description": "Payload to update incident coordinates with an explicit capture timestamp.",
+        "properties": {
+          "incident_latitude": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Incident Latitude",
+            "type": "number"
+          },
+          "incident_longitude": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Incident Longitude",
+            "type": "number"
+          },
+          "location_captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Timestamp of the location acquisition; defaults to current time",
+            "title": "Location Captured At"
+          }
+        },
+        "required": [
+          "incident_latitude",
+          "incident_longitude"
+        ],
+        "title": "EmergencyLocationUpdate",
+        "type": "object"
+      },
+      "EmergencyPatientUpdate": {
+        "additionalProperties": false,
+        "description": "Payload to update patient observations from the scene or en route.",
+        "properties": {
+          "patient_info": {
+            "additionalProperties": true,
+            "description": "Updated patient observations (e.g. vitals, consciousness, apparent injuries)",
+            "title": "Patient Info",
+            "type": "object"
+          }
+        },
+        "required": [
+          "patient_info"
+        ],
+        "title": "EmergencyPatientUpdate",
+        "type": "object"
+      },
+      "EmergencyResponse": {
+        "description": "Emergency incident representation.",
+        "properties": {
+          "assigned_ambulance_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned Ambulance Id"
+          },
+          "confirmed_hospital_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Hospital Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by_id": {
+            "format": "uuid",
+            "title": "Created By Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "incident_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incident Description"
+          },
+          "incident_latitude": {
+            "title": "Incident Latitude",
+            "type": "number"
+          },
+          "incident_longitude": {
+            "title": "Incident Longitude",
+            "type": "number"
+          },
+          "incident_type": {
+            "title": "Incident Type",
+            "type": "string"
+          },
+          "location_captured_at": {
+            "format": "date-time",
+            "title": "Location Captured At",
+            "type": "string"
+          },
+          "patient_info": {
+            "additionalProperties": true,
+            "title": "Patient Info",
+            "type": "object"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EmergencyStatus"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "created_by_id",
+          "incident_type",
+          "patient_info",
+          "incident_latitude",
+          "incident_longitude",
+          "location_captured_at",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "EmergencyResponse",
+        "type": "object"
+      },
+      "EmergencyStatus": {
+        "description": "Central lifecycle statuses for an emergency incident.",
+        "enum": [
+          "CREATED",
+          "ASSESSMENT_IN_PROGRESS",
+          "SEARCHING_HOSPITAL",
+          "ACCEPTANCE_PENDING",
+          "HOSPITAL_CONFIRMED",
+          "TRANSPORTING",
+          "ARRIVED",
+          "HANDOVER_COMPLETED",
+          "CANCELLED",
+          "ESCALATION_REQUIRED"
+        ],
+        "title": "EmergencyStatus",
+        "type": "string"
+      },
+      "EmergencyStatusUpdate": {
+        "additionalProperties": false,
+        "description": "Payload to request an explicit, authorized state transition.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional reason or context for the transition",
+            "title": "Reason"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EmergencyStatus",
+            "description": "Target lifecycle state"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "EmergencyStatusUpdate",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HospitalAvailabilityUpdate": {
+        "additionalProperties": false,
+        "description": "Payload to update explicitly reported hospital availability.",
+        "properties": {
+          "reported_availability": {
+            "additionalProperties": true,
+            "description": "Explicitly maintained availability data (e.g. {'icu_beds': 4, 'accepting': true})",
+            "title": "Reported Availability",
+            "type": "object"
+          }
+        },
+        "required": [
+          "reported_availability"
+        ],
+        "title": "HospitalAvailabilityUpdate",
+        "type": "object"
+      },
+      "HospitalCreate": {
+        "additionalProperties": false,
+        "description": "Payload to register a new hospital (Admin only).",
+        "properties": {
+          "address": {
+            "maxLength": 500,
+            "minLength": 5,
+            "title": "Address",
+            "type": "string"
+          },
+          "capabilities": {
+            "description": "Registered facilities/specialties, e.g. ['ICU', 'TRAUMA_LEVEL_1']",
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "contact_number": {
+            "maxLength": 50,
+            "minLength": 5,
+            "title": "Contact Number",
+            "type": "string"
+          },
+          "latitude": {
+            "description": "Latitude between -90 and 90",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Latitude",
+            "type": "number"
+          },
+          "longitude": {
+            "description": "Longitude between -180 and 180",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Longitude",
+            "type": "number"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 2,
+            "title": "Name",
+            "type": "string"
+          },
+          "registration_identifier": {
+            "maxLength": 100,
+            "minLength": 2,
+            "title": "Registration Identifier",
+            "type": "string"
+          },
+          "reported_availability": {
+            "additionalProperties": true,
+            "description": "Initial reported capacity, e.g. {'icu_beds': 5, 'accepting_patients': true}",
+            "title": "Reported Availability",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "registration_identifier",
+          "address",
+          "latitude",
+          "longitude",
+          "contact_number"
+        ],
+        "title": "HospitalCreate",
+        "type": "object"
+      },
+      "HospitalResponse": {
+        "description": "Public hospital representation.",
+        "properties": {
+          "address": {
+            "title": "Address",
+            "type": "string"
+          },
+          "availability_updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Availability Updated At"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "contact_number": {
+            "title": "Contact Number",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "latitude": {
+            "title": "Latitude",
+            "type": "number"
+          },
+          "longitude": {
+            "title": "Longitude",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "registration_identifier": {
+            "title": "Registration Identifier",
+            "type": "string"
+          },
+          "reported_availability": {
+            "additionalProperties": true,
+            "title": "Reported Availability",
+            "type": "object"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "registration_identifier",
+          "address",
+          "latitude",
+          "longitude",
+          "contact_number",
+          "capabilities",
+          "reported_availability",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "HospitalResponse",
+        "type": "object"
+      },
+      "HospitalUpdate": {
+        "additionalProperties": false,
+        "description": "Payload to update hospital profile details.",
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 5,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Registered facilities/specialties",
+            "title": "Capabilities"
+          },
+          "contact_number": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "minLength": 5,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Number"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": -90.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "maximum": 180.0,
+                "minimum": -180.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 2,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "HospitalUpdate",
+        "type": "object"
+      },
+      "LoginRequest": {
+        "additionalProperties": false,
+        "description": "User credentials for logging in.",
+        "properties": {
+          "email": {
+            "description": "Registered user email address",
+            "format": "email",
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "description": "Account password",
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "type": "object"
+      },
+      "PaginatedResponse_EmergencyResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EmergencyResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "total_pages": {
+            "title": "Total Pages",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size",
+          "total_pages"
+        ],
+        "title": "PaginatedResponse[EmergencyResponse]",
+        "type": "object"
+      },
+      "PaginatedResponse_HospitalResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HospitalResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "total_pages": {
+            "title": "Total Pages",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size",
+          "total_pages"
+        ],
+        "title": "PaginatedResponse[HospitalResponse]",
+        "type": "object"
+      },
+      "TokenResponse": {
+        "description": "JWT bearer access token response.",
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "expires_in": {
+            "description": "Token validity in seconds",
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "token_type": {
+            "default": "bearer",
+            "title": "Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "expires_in"
+        ],
+        "title": "TokenResponse",
+        "type": "object"
+      },
+      "UserResponse": {
+        "description": "Public user profile response (safe, no secrets).",
+        "properties": {
+          "ambulance_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ambulance Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "hospital_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hospital Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "role",
+          "is_active",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "UserResponse",
+        "type": "object"
+      },
+      "UserRole": {
+        "description": "Initial system user roles.",
+        "enum": [
+          "ADMIN",
+          "HOSPITAL_STAFF",
+          "AMBULANCE_CREW"
+        ],
+        "title": "UserRole",
+        "type": "string"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Backend API for the Emergency Response Coordination System.",
+    "title": "Emergency Response Coordination System",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/": {
+      "get": {
+        "description": "Returns basic information about the running service.",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Root  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Root \u2014 service identity"
+      }
+    },
+    "/api/v1/admin/dashboard": {
+      "get": {
+        "description": "Provide an aggregated operational metrics summary for administrators.\n\nDoes not return sensitive patient details.",
+        "operationId": "get_admin_dashboard_api_v1_admin_dashboard_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get administrative operational summary",
+        "tags": [
+          "Administration"
+        ]
+      }
+    },
+    "/api/v1/ambulances/me": {
+      "get": {
+        "description": "Retrieve operational profile of the ambulance assigned to the authenticated crew.",
+        "operationId": "get_current_ambulance_api_v1_ambulances_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AmbulanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get current ambulance profile",
+        "tags": [
+          "Ambulances"
+        ]
+      }
+    },
+    "/api/v1/ambulances/me/availability": {
+      "patch": {
+        "description": "Update operational readiness/availability of the assigned ambulance.",
+        "operationId": "update_ambulance_availability_api_v1_ambulances_me_availability_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AmbulanceAvailabilityUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AmbulanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update ambulance operational availability",
+        "tags": [
+          "Ambulances"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "description": "Authenticate with email and password to receive a JWT access token.",
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Authenticate user and issue access token",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "description": "Retrieve the profile of the currently authenticated user.\n\nNever returns password hashes or access tokens.",
+        "operationId": "get_me_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get current authenticated user profile",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/api/v1/emergencies": {
+      "get": {
+        "description": "Retrieve emergencies accessible to the authenticated user.",
+        "operationId": "list_emergencies_api_v1_emergencies_get",
+        "parameters": [
+          {
+            "description": "Page number",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "description": "Page number",
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Items per page",
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "description": "Items per page",
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter by status",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EmergencyStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by status",
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_EmergencyResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List accessible emergency incidents",
+        "tags": [
+          "Emergencies"
+        ]
+      },
+      "post": {
+        "description": "Create an emergency case.\n\nPermitted for AMBULANCE_CREW and ADMIN users.",
+        "operationId": "create_emergency_api_v1_emergencies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmergencyCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmergencyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create a new emergency incident",
+        "tags": [
+          "Emergencies"
+        ]
+      }
+    },
+    "/api/v1/emergencies/{emergency_id}": {
+      "get": {
+        "description": "Retrieve details for a specific emergency incident.",
+        "operationId": "get_emergency_api_v1_emergencies__emergency_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "emergency_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Emergency Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmergencyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Retrieve an emergency incident by ID",
+        "tags": [
+          "Emergencies"
+        ]
+      }
+    },
+    "/api/v1/emergencies/{emergency_id}/history": {
+      "get": {
+        "description": "Retrieve chronological audit trail of state changes and modifications.",
+        "operationId": "get_emergency_history_api_v1_emergencies__emergency_id__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "emergency_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Emergency Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EmergencyHistoryResponse"
+                  },
+                  "title": "Response Get Emergency History Api V1 Emergencies  Emergency Id  History Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Retrieve audit and lifecycle history",
+        "tags": [
+          "Emergencies"
+        ]
+      }
+    },
+    "/api/v1/emergencies/{emergency_id}/location": {
+      "patch": {
+        "description": "Update scene coordinates and location capture timestamp.",
+        "operationId": "update_location_api_v1_emergencies__emergency_id__location_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "emergency_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Emergency Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmergencyLocationUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmergencyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update incident coordinates",
+        "tags": [
+          "Emergencies"
+        ]
+      }
+    },
+    "/api/v1/emergencies/{emergency_id}/patient": {
+      "patch": {
+        "description": "Update patient observations for an emergency.",
+        "operationId": "update_patient_info_api_v1_emergencies__emergency_id__patient_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "emergency_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Emergency Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmergencyPatientUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmergencyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update patient information",
+        "tags": [
+          "Emergencies"
+        ]
+      }
+    },
+    "/api/v1/emergencies/{emergency_id}/status": {
+      "patch": {
+        "description": "Transition emergency lifecycle status following validated transition rules.",
+        "operationId": "update_status_api_v1_emergencies__emergency_id__status_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "emergency_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Emergency Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmergencyStatusUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmergencyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Transition emergency status",
+        "tags": [
+          "Emergencies"
+        ]
+      }
+    },
+    "/api/v1/hospitals": {
+      "get": {
+        "description": "Retrieve a paginated directory of registered hospitals.\n\nAccessible to any authenticated user.",
+        "operationId": "list_hospitals_api_v1_hospitals_get",
+        "parameters": [
+          {
+            "description": "Page number",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "description": "Page number",
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Items per page",
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "description": "Items per page",
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_HospitalResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List registered hospitals",
+        "tags": [
+          "Hospitals"
+        ]
+      },
+      "post": {
+        "description": "Create and register a hospital in the system.\n\nRestricted to ADMIN users.",
+        "operationId": "create_hospital_api_v1_hospitals_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HospitalCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HospitalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Register a new hospital (Admin only)",
+        "tags": [
+          "Hospitals"
+        ]
+      }
+    },
+    "/api/v1/hospitals/me": {
+      "get": {
+        "description": "Retrieve profile and capacity data for the hospital assigned to the caller.",
+        "operationId": "get_current_hospital_api_v1_hospitals_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HospitalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get current hospital profile",
+        "tags": [
+          "Hospitals"
+        ]
+      },
+      "patch": {
+        "description": "Update profile details of the caller's assigned hospital.",
+        "operationId": "update_current_hospital_api_v1_hospitals_me_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HospitalUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HospitalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update current hospital profile",
+        "tags": [
+          "Hospitals"
+        ]
+      }
+    },
+    "/api/v1/hospitals/me/availability": {
+      "patch": {
+        "description": "Update explicitly reported capacity data for the caller's assigned hospital.",
+        "operationId": "update_hospital_availability_api_v1_hospitals_me_availability_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HospitalAvailabilityUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HospitalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update explicitly reported hospital availability",
+        "tags": [
+          "Hospitals"
+        ]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "description": "Indicates the application process is alive. Does not check downstream dependencies.",
+        "operationId": "liveness_health_live_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Liveness Health Live Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Liveness probe",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "description": "Verifies that required dependencies (e.g. PostgreSQL) are available. Returns 503 if any required dependency is unhealthy.",
+        "operationId": "readiness_health_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "title": "Response Readiness Health Ready Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Readiness probe",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/robots.txt": {
+      "get": {
+        "description": "Instructs web crawlers not to index the API.",
+        "operationId": "robots_txt_robots_txt_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Robots exclusion"
+      }
+    }
+  }
+}

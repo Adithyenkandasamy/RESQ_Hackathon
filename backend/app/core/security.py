@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
-import jwt
 
 from app.config import get_settings
 
@@ -48,10 +48,12 @@ def create_access_token(
     else:
         expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
-    to_encode.update({
-        "iat": int(now.timestamp()),
-        "exp": int(expire.timestamp()),
-    })
+    to_encode.update(
+        {
+            "iat": int(now.timestamp()),
+            "exp": int(expire.timestamp()),
+        }
+    )
 
     return jwt.encode(
         to_encode,

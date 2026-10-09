@@ -18,7 +18,9 @@ class HospitalCreate(BaseModel):
     registration_identifier: str = Field(..., min_length=2, max_length=100)
     address: str = Field(..., min_length=5, max_length=500)
     latitude: float = Field(..., ge=-90.0, le=90.0, description="Latitude between -90 and 90")
-    longitude: float = Field(..., ge=-180.0, le=180.0, description="Longitude between -180 and 180")
+    longitude: float = Field(
+        ..., ge=-180.0, le=180.0, description="Longitude between -180 and 180"
+    )
     contact_number: str = Field(..., min_length=5, max_length=50)
     capabilities: list[str] = Field(
         default_factory=list,

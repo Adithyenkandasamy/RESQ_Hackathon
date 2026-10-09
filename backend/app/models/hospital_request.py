@@ -6,7 +6,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Index, Text, Uuid
+from sqlalchemy import DateTime, ForeignKey, Index, Text, Uuid
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -44,17 +45,11 @@ class HospitalRequest(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False
     )
-    responded_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
-    emergency: Mapped[Emergency] = relationship(
-        "Emergency", back_populates="hospital_requests"
-    )
-    hospital: Mapped[Hospital] = relationship(
-        "Hospital", back_populates="hospital_requests"
-    )
+    emergency: Mapped[Emergency] = relationship("Emergency", back_populates="hospital_requests")
+    hospital: Mapped[Hospital] = relationship("Hospital", back_populates="hospital_requests")
 
     __table_args__ = (
         Index("ix_hospital_requests_emergency_hospital", "emergency_id", "hospital_id"),

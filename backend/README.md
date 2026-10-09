@@ -1,11 +1,12 @@
 # Emergency Response Coordination System — Backend
 
-> **Phase 1: Backend Foundation and Configuration**
+> **Phase 2: Database Models, Authentication, and Core APIs**
 
 Production-minded FastAPI backend for the Emergency Response Coordination
-System (ERCS).  This phase establishes the infrastructure foundation:
-configuration management, database connectivity, health endpoints,
-structured logging, error handling, and an in-memory cache.
+System (ERCS). Building upon the Phase 1 foundation, Phase 2 implements
+database models, secure JWT authentication with Argon2 password hashing,
+role-based and organization-scoped authorization, core CRUD APIs, an
+audited emergency lifecycle state machine, and administrative oversight.
 
 ---
 
@@ -14,14 +15,14 @@ structured logging, error handling, and an in-memory cache.
 | Layer          | Technology                           |
 | -------------- | ------------------------------------ |
 | Framework      | FastAPI 0.115                        |
-| Language       | Python ≥ 3.10                        |
+| Language       | Python ≥ 3.10 (3.14 compatible)      |
 | Database       | PostgreSQL (Aiven) via asyncpg       |
 | ORM            | SQLAlchemy 2.x (async)               |
-| Migrations     | Alembic                              |
-| Config         | Pydantic Settings                    |
-| Testing        | pytest + HTTPX                       |
-| Linting        | Ruff                                 |
-| Type checking  | mypy                                 |
+| Migrations     | Alembic 1.16                         |
+| Authentication | JWT (PyJWT) + Argon2id (argon2-cffi) |
+| Validation     | Pydantic v2 + Pydantic Settings      |
+| Testing        | pytest + HTTPX + aiosqlite (isolated)|
+| Linting & Types| Ruff + mypy (strict)                 |
 | Package mgr    | uv                                   |
 
 ---
@@ -33,28 +34,59 @@ backend/
 ├── app/
 │   ├── __init__.py          # Package marker
 │   ├── main.py              # FastAPI application entry point
-│   ├── config.py            # Pydantic Settings configuration
+│   ├── config.py            # Pydantic Settings configuration + JWT configs
 │   ├── database.py          # Async SQLAlchemy engine + sessions
 │   ├── core/
 │   │   ├── __init__.py
 │   │   ├── logging.py       # Structured logging + request-ID middleware
 │   │   ├── errors.py        # Centralized exception handlers
-│   │   └── cache.py         # In-process TTL cache
+│   │   ├── cache.py         # In-process TTL cache
+│   │   ├── security.py      # Argon2 password hashing + JWT token handling
+│   │   └── auth.py          # FastAPI dependencies: get_current_user, require_roles
+│   ├── models/
+│   │   ├── __init__.py      # Exported models & Base
+│   │   ├── enums.py         # UserRole, AmbulanceStatus, EmergencyStatus, etc.
+│   │   ├── user.py          # User account model
+│   │   ├── hospital.py      # Hospital model
+│   │   ├── ambulance.py     # Ambulance model
+│   │   ├── emergency.py     # Emergency incident model
+│   │   ├── hospital_request.py # Hospital admission request model
+│   │   └── emergency_history.py # Emergency audit trail model
+│   ├── schemas/
+│   │   ├── __init__.py      # Exported Pydantic schemas
+│   │   ├── common.py        # PaginationParams & PaginatedResponse[T]
+│   │   ├── auth.py          # LoginRequest, TokenResponse, UserResponse
+│   │   ├── hospital.py      # HospitalCreate, HospitalUpdate, HospitalResponse
+│   │   ├── ambulance.py     # AmbulanceAvailabilityUpdate, AmbulanceResponse
+│   │   ├── emergency.py     # EmergencyCreate, EmergencyPatientUpdate, etc.
+│   │   └── admin.py         # AdminDashboardResponse
 │   └── routers/
 │       ├── __init__.py
-│       └── health.py        # /health/live, /health/ready
-├── tests/
-│   ├── conftest.py          # Shared fixtures
-│   ├── test_health.py       # Health / root / request-ID tests
-│   ├── test_cache.py        # Cache unit tests
-│   └── test_errors.py       # Error format tests
+│       ├── health.py        # /health/live, /health/ready
+│       ├── auth.py          # /api/v1/auth/login, /api/v1/auth/me
+│       ├── hospitals.py     # /api/v1/hospitals endpoints
+│       ├── ambulances.py    # /api/v1/ambulances/me endpoints
+│       ├── emergencies.py   # /api/v1/emergencies endpoints & transitions
+│       └── admin.py         # /api/v1/admin/dashboard
 ├── migrations/              # Alembic migration scripts
 │   ├── env.py
 │   ├── script.py.mako
 │   └── versions/
-├── .env.example             # Environment template (NO secrets)
-├── .gitignore
-├── alembic.ini
+│       └── adbc4e6f26e3_phase2_initial_schema.py
+├── scripts/
+│   ├── export_openapi.py    # Export application OpenAPI spec to openapi.json
+│   └── create_admin.py      # Safe CLI utility to provision admin accounts
+├── tests/
+│   ├── conftest.py          # In-memory SQLite async test database fixtures
+│   ├── test_health.py       # Health / root / request-ID tests
+│   ├── test_cache.py        # Cache unit tests
+│   ├── test_errors.py       # Error format tests
+│   ├── test_auth.py         # Auth, JWT, login, disabled user tests
+│   ├── test_hospitals.py    # Hospital CRUD, scoping, availability tests
+│   ├── test_ambulances.py   # Ambulance profile & availability tests
+│   ├── test_emergencies.py  # Emergency lifecycle, transitions, history tests
+│   └── test_admin.py        # Admin dashboard and role-restriction tests
+├── openapi.json             # Exported OpenAPI schema
 ├── pyproject.toml           # Dependencies + tool config
 ├── uv.lock                  # Locked dependency versions
 ├── Dockerfile
@@ -64,341 +96,168 @@ backend/
 
 ---
 
-## Prerequisites
+## Authentication and Roles
 
-- **Python** ≥ 3.10
-- **uv** package manager — [install guide](https://docs.astral.sh/uv/)
+### Roles
+- `ADMIN`: Full administrative management. Can register hospitals, view system-wide statistics, create and inspect all emergencies.
+- `HOSPITAL_STAFF`: Associated with a specific `hospital_id`. Can retrieve and update their own hospital profile and reported availability. Cannot access other hospitals or ambulance operational controls.
+- `AMBULANCE_CREW`: Associated with a specific `ambulance_id`. Can retrieve and update their assigned vehicle operational readiness, create emergencies, report vitals and scene coordinates, and transition states for assigned incidents.
+
+### Authentication Flow
+1. **Login**: Client sends `POST /api/v1/auth/login` with `{"email": "...", "password": "..."}`.
+2. **Verification**: Password verified using Argon2id. Disabled accounts (`is_active=False`) are rejected.
+3. **Token**: Generates signed JWT bearer token containing `sub` (user UUID), `email`, and `role`.
+4. **Requests**: Client attaches `Authorization: Bearer <token>` in HTTP headers.
+5. **Profile**: `GET /api/v1/auth/me` returns current user profile (never exposing password hashes or tokens).
 
 ---
 
-## Local Environment Setup
+## Safe Provisioning of the Initial Administrator
 
-### 1. Clone and navigate
-
-```bash
-git clone <repo-url>
-cd backend
-```
-
-### 2. Create virtual environment and install dependencies
+Do not use default or hardcoded credentials. To create the first administrator safely:
 
 ```bash
-uv sync
-```
+# Interactive prompt (masks password input securely):
+uv run python scripts/create_admin.py --email admin@ercs.org
 
-This creates a `.venv/` directory and installs all dependencies
-(including dev dependencies) from the lock file.
-
-**Windows PowerShell:**
-
-```powershell
-uv sync
-```
-
-### 3. Configure environment
-
-```bash
-cp .env.example .env
-# Edit .env with your values
-```
-
-For local development **without** a database, leave `DATABASE_URL` empty.
-The application starts fine; `/health/ready` will report ok (development
-mode treats missing DB as acceptable).
-
-For Aiven connectivity, set:
-
-```
-DATABASE_URL=postgresql+asyncpg://user:password@host:port/dbname?ssl=require
+# Or non-interactive (CI / deployment automation):
+uv run python scripts/create_admin.py --email admin@ercs.org --password "YourStrongPassword123!"
 ```
 
 ---
 
-## Running the Application
+## API Endpoints (`/api/v1`)
 
-### Development
+### Authentication
+- `POST /api/v1/auth/login` — Authenticate and receive JWT access token.
+- `GET  /api/v1/auth/me` — Retrieve profile of the authenticated caller.
 
-```bash
-uv run uvicorn app.main:app --reload
-```
+### Hospitals
+- `GET   /api/v1/hospitals` — List registered hospitals (paginated, accessible to authenticated users).
+- `POST  /api/v1/hospitals` — Register new hospital (restricted to `ADMIN`).
+- `GET   /api/v1/hospitals/me` — Retrieve profile of assigned hospital (`HOSPITAL_STAFF`).
+- `PATCH /api/v1/hospitals/me` — Update assigned hospital details (`HOSPITAL_STAFF`).
+- `PATCH /api/v1/hospitals/me/availability` — Update explicitly reported availability (`HOSPITAL_STAFF`).
 
-The server starts at `http://127.0.0.1:8000`.
+### Ambulances
+- `GET   /api/v1/ambulances/me` — Retrieve operational profile of assigned vehicle (`AMBULANCE_CREW`).
+- `PATCH /api/v1/ambulances/me/availability` — Update operational status (`AMBULANCE_CREW`).
 
-- Interactive docs: `http://127.0.0.1:8000/docs`
-- ReDoc: `http://127.0.0.1:8000/redoc`
+### Emergencies
+- `POST  /api/v1/emergencies` — Create emergency incident (`AMBULANCE_CREW`, `ADMIN`).
+- `GET   /api/v1/emergencies` — List accessible emergencies (role-scoped, paginated).
+- `GET   /api/v1/emergencies/{emergency_id}` — Retrieve emergency by ID (role-authorized).
+- `PATCH /api/v1/emergencies/{emergency_id}/patient` — Update patient scene observations (partial details allowed).
+- `PATCH /api/v1/emergencies/{emergency_id}/location` — Update coordinates with capture timestamp (validated bounds).
+- `PATCH /api/v1/emergencies/{emergency_id}/status` — Transition emergency lifecycle status.
+- `GET   /api/v1/emergencies/{emergency_id}/history` — Retrieve chronological audit trail.
 
-**Windows PowerShell:**
-
-```powershell
-uv run uvicorn app.main:app --reload
-```
-
-### Production
-
-```bash
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
-```
-
-In production (`APP_ENV=production`):
-- Interactive docs (`/docs`, `/redoc`) are disabled.
-- `DEBUG` should be `false`.
-- `DATABASE_URL` **must** be configured.
-
----
-
-## Running Tests
-
-```bash
-uv run pytest -v
-```
-
-Tests run entirely without a real database.  No Aiven credentials are
-needed.
-
-**Windows PowerShell:**
-
-```powershell
-uv run pytest -v
-```
+### Administration
+- `GET   /api/v1/admin/dashboard` — Aggregated operational metrics summary (`ADMIN` only). No sensitive patient data is exposed.
 
 ---
 
-## Linting and Formatting (Ruff)
+## Emergency Lifecycle & State Transitions
+
+The system enforces an explicit state transition machine:
+
+```
+[CREATED] ──► [ASSESSMENT_IN_PROGRESS] ──► [SEARCHING_HOSPITAL]
+   │                       │                       │
+   ▼                       ▼                       ▼
+[CANCELLED]             [CANCELLED]             [CANCELLED]
+   ▲                       ▲                       ▲
+   │                       │                       │
+   │               [ACCEPTANCE_PENDING]            │
+   │                       │                       │
+   │                       ▼                       │
+   │              [HOSPITAL_CONFIRMED]             │
+   │                       │                       │
+   │                       ▼                       │
+   │                 [TRANSPORTING]                │
+   │                       │                       │
+   │                       ▼                       │
+   │                   [ARRIVED]                   │
+   │                       │                       │
+   │                       ▼                       │
+   │             [HANDOVER_COMPLETED]              │
+   │                                               │
+   └── [ESCALATION_REQUIRED] ◄─────────────────────┘
+```
+
+- Invalid transitions return HTTP `400 Bad Request` with details on allowed next states.
+- Every state transition automatically writes an immutable record to `emergency_history`.
+
+---
+
+## OpenAPI Export
+
+To export the OpenAPI schema from the actual application:
 
 ```bash
-# Check
+uv run python scripts/export_openapi.py --out openapi.json
+```
+
+The exported schema is generated directly from the live FastAPI routes and metadata.
+
+---
+
+## Automated Testing & Quality Checks
+
+Run the automated test suite (runs 100% against an isolated in-memory test database):
+
+```bash
+uv run pytest
+```
+
+Run code formatting and lint checks:
+
+```bash
 uv run ruff check .
-
-# Fix auto-fixable issues
-uv run ruff check --fix .
-
-# Format
-uv run ruff format .
-
-# Check formatting without changes
 uv run ruff format --check .
+uv run mypy app
 ```
 
 ---
 
-## Type Checking (mypy)
+## Database Migrations
+
+Apply Alembic migrations to your database:
 
 ```bash
-uv run mypy app/
-```
-
----
-
-## Alembic (Database Migrations)
-
-Alembic reads `DATABASE_URL` from your `.env` / environment.
-
-```bash
-# Check current migration state
-uv run alembic current
-
-# Create a new migration (after defining models)
-uv run alembic revision --autogenerate -m "description"
-
-# Apply all pending migrations
 uv run alembic upgrade head
-
-# Rollback one migration
-uv run alembic downgrade -1
 ```
 
----
-
-## Testing Aiven Connectivity
-
-To verify that your `DATABASE_URL` connects successfully to Aiven:
+Generate SQL script for review without touching the live database:
 
 ```bash
-uv run python -c "
-import asyncio
-from app.config import get_settings
-from app.database import init_engine, check_connection, close_engine
-
-async def main():
-    settings = get_settings()
-    if not settings.database_is_configured:
-        print('DATABASE_URL is not configured.')
-        return
-    init_engine(settings.DATABASE_URL)
-    ok = await check_connection()
-    print('Connection:', 'SUCCESS' if ok else 'FAILED')
-    await close_engine()
-
-asyncio.run(main())
-"
+uv run alembic upgrade head --sql
 ```
-
-> **Note:** Aiven connectivity has NOT been verified as part of this
-> Phase 1 implementation.  Run the command above with a valid
-> `DATABASE_URL` to confirm.
-
----
-
-## Docker
-
-### Build
-
-```bash
-docker build -t er-cs-backend .
-```
-
-### Run
-
-```bash
-docker run -p 8000:8000 --env-file .env er-cs-backend
-```
-
-### Docker Compose (local dev)
-
-```bash
-docker compose up --build
-```
-
-The compose file does **not** include a local PostgreSQL.
-To use a database, set `DATABASE_URL` in your `.env` file.
-
----
-
-## Health Endpoints
-
-| Endpoint          | Purpose               | Response (healthy)    | Response (unhealthy) |
-| ----------------- | --------------------- | --------------------- | -------------------- |
-| `GET /`           | Service identity      | `200` name/version    | —                    |
-| `GET /health/live`| Liveness probe        | `200 {"status":"ok"}` | —                    |
-| `GET /health/ready`| Readiness probe      | `200 {"status":"ok"}` | `503`                |
-
-**Liveness** confirms the process is running. It never checks downstream
-services.
-
-**Readiness** verifies that required dependencies (currently PostgreSQL)
-are available.  In development mode, missing `DATABASE_URL` is acceptable.
-In production, missing or unreachable DB causes a `503`.
-
-Health responses never expose credentials, hostnames, or exception details.
-
----
-
-## Logging and Request IDs
-
-Every request is assigned a UUID request ID:
-
-- If the client sends `X-Request-ID` with a valid UUID, it is reused.
-- Otherwise, a new UUID4 is generated.
-- The ID is returned in the `X-Request-ID` response header.
-- The ID appears in all log records for that request.
-
-Health-check requests are logged at `DEBUG` level to reduce noise.
-
-Sensitive data (passwords, tokens, patient info) is never logged.
 
 ---
 
 ## Error Response Format
 
-All errors use a consistent JSON envelope:
+All error responses use the standard envelope:
 
 ```json
 {
   "error": {
-    "code": "NOT_FOUND",
-    "message": "The requested resource was not found.",
+    "code": "BAD_REQUEST",
+    "message": "Invalid transition from 'CREATED' to 'HANDOVER_COMPLETED'. Allowed target states: ['ASSESSMENT_IN_PROGRESS', 'CANCELLED'].",
     "request_id": "550e8400-e29b-41d4-a716-446655440000"
   }
 }
 ```
 
-| HTTP Status | Code               | When                           |
-| ----------- | ------------------ | ------------------------------ |
-| 400         | `BAD_REQUEST`      | Malformed request              |
-| 404         | `NOT_FOUND`        | Unknown path                   |
-| 422         | `VALIDATION_ERROR` | Invalid request parameters     |
-| 500         | `INTERNAL_ERROR`   | Unexpected server error        |
-| 503         | `SERVICE_UNAVAILABLE`| Dependency unavailable       |
-
-Stack traces are **never** sent to the client.  Full details are logged
-server-side.
-
----
-
-## Cache Limitations
-
-The in-process TTL cache (`app.core.cache.TTLCache`) is suitable only
-for temporary, non-critical data:
-
-- **Entries disappear** when the process restarts.
-- **Multiple workers** do NOT share cache contents.
-- **Stale data** — cached values can become outdated.
-- **Never** use for emergency records, hospital assignments, or other
-  critical state.
-
----
-
-## CORS Configuration
-
-Allowed origins are read from `CORS_ORIGINS` (comma-separated):
-
-```
-# Development
-CORS_ORIGINS=http://localhost:3000,http://localhost:8081
-
-# Production — use your real deployed domains
-CORS_ORIGINS=https://hospital.yourdomain.com,https://admin.yourdomain.com
-```
-
-Wildcard (`*`) is NOT used with credentials.
-
-CORS is transport-level security only — it does not replace
-authentication or authorization.
-
-**Production:** Set `CORS_ORIGINS` to your actual deployed frontend
-domains.  Do not leave development origins in production.
-
----
-
-## robots.txt
-
-`GET /robots.txt` returns:
-
-```
-User-agent: *
-Disallow: /
-```
-
-This is crawler guidance only.  It does not provide security.
-Served with `Content-Type: text/plain`.
-
----
-
-## Production Security Notes
-
-1. Set `APP_ENV=production` and `DEBUG=false`.
-2. Configure `DATABASE_URL` with your Aiven credentials.
-3. Set `CORS_ORIGINS` to actual production domains.
-4. Interactive docs (`/docs`, `/redoc`) are disabled in production.
-5. TLS certificate verification is always enabled for database
-   connections — never disabled.
-6. Never commit `.env` files with real credentials.
-7. Use Kubernetes/Docker secrets or environment injection for secrets.
-
 ---
 
 ## Deferred to Later Phases
 
-The following are intentionally **not** implemented in Phase 1:
-
-- User authentication and authorization (JWT, etc.)
-- Emergency workflow (create, triage, dispatch)
-- Hospital matching and assignment
-- Socket.IO real-time event handling
-- ElevenLabs speech transcription integration
+The following are intentionally **not** implemented in Phase 2:
+- Socket.IO real-time event streaming
 - Groq AI processing integration
-- Business database models (emergencies, hospitals, ambulances)
-- Redis caching layer
-- File upload / media handling
-- Rate limiting
-- Admin dashboard API
+- ElevenLabs voice transcription
+- Automated multi-criteria hospital matching algorithm
+- Redis distributed cache / session store
+- Kafka / Celery message queues

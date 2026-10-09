@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, ForeignKey, Index, JSON, String, Uuid
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -43,9 +43,7 @@ class EmergencyHistory(Base):
     )
 
     # Relationships
-    emergency: Mapped[Emergency] = relationship(
-        "Emergency", back_populates="history_entries"
-    )
+    emergency: Mapped[Emergency] = relationship("Emergency", back_populates="history_entries")
     actor: Mapped[User | None] = relationship("User")
 
     __table_args__ = (

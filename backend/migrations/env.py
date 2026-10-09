@@ -12,9 +12,9 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+import app.models  # noqa: F401
 from app.config import get_settings
 from app.database import Base, _normalize_database_url
-import app.models  # noqa: F401
 
 # Alembic Config object.
 config = context.config

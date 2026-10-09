@@ -6,7 +6,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, ForeignKey, String, Uuid
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Uuid
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -52,12 +53,8 @@ class User(Base):
     )
 
     # Relationships
-    hospital: Mapped[Hospital | None] = relationship(
-        "Hospital", back_populates="staff_members"
-    )
-    ambulance: Mapped[Ambulance | None] = relationship(
-        "Ambulance", back_populates="crew_members"
-    )
+    hospital: Mapped[Hospital | None] = relationship("Hospital", back_populates="staff_members")
+    ambulance: Mapped[Ambulance | None] = relationship("Ambulance", back_populates="crew_members")
     created_emergencies: Mapped[list[Emergency]] = relationship(
         "Emergency", back_populates="creator"
     )

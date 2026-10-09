@@ -22,7 +22,7 @@ from fastapi.responses import PlainTextResponse
 from app.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import RequestIdMiddleware, setup_logging
-from app.routers import health
+from app.routers import admin, ambulances, auth, emergencies, health, hospitals
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +98,11 @@ def create_app() -> FastAPI:
 
     # ── Routers ─────────────────────────────────────────────────
     application.include_router(health.router)
+    application.include_router(auth.router, prefix=settings.API_V1_PREFIX)
+    application.include_router(hospitals.router, prefix=settings.API_V1_PREFIX)
+    application.include_router(ambulances.router, prefix=settings.API_V1_PREFIX)
+    application.include_router(emergencies.router, prefix=settings.API_V1_PREFIX)
+    application.include_router(admin.router, prefix=settings.API_V1_PREFIX)
 
     # ── Root endpoint ───────────────────────────────────────────
     @application.get(

@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, Float, Index, JSON, String
+from sqlalchemy import JSON, DateTime, Float, Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -70,6 +70,4 @@ class Hospital(Base):
         "Emergency", back_populates="confirmed_hospital"
     )
 
-    __table_args__ = (
-        Index("ix_hospitals_coords", "latitude", "longitude"),
-    )
+    __table_args__ = (Index("ix_hospitals_coords", "latitude", "longitude"),)
