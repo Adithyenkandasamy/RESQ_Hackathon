@@ -10,14 +10,70 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.auth import get_current_user
-from app.core.security import create_access_token, verify_password
+from app.core.security import create_access_token, hash_password, verify_password
 from app.database import get_db_session
+from app.models.ambulance import Ambulance
+from app.models.enums import AmbulanceStatus, UserRole
 from app.models.user import User
-from app.schemas.auth import LoginRequest, TokenResponse, UserResponse
+from app.schemas.auth import (
+    AmbulanceCrewRegisterRequest,
+    LoginRequest,
+    TokenResponse,
+    UserResponse,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+@router.post(
+    "/register-crew",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a new ambulance crew member and vehicle",
+)
+async def register_ambulance_crew(
+    payload: AmbulanceCrewRegisterRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> UserResponse:
+    """Register an ambulance crew member and attach to their ambulance unit."""
+    normalized_email = payload.email.lower()
+    stmt = select(User).where(User.email == normalized_email)
+    res = await session.execute(stmt)
+    if res.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email address already exists.",
+        )
+
+    clean_ident = payload.ambulance_identifier.strip().upper()
+    amb_stmt = select(Ambulance).where(Ambulance.registration_identifier == clean_ident)
+    amb_res = await session.execute(amb_stmt)
+    ambulance = amb_res.scalar_one_or_none()
+
+    if ambulance is None:
+        ambulance = Ambulance(
+            registration_identifier=clean_ident,
+            contact_number=payload.contact_number,
+            operational_status=AmbulanceStatus.AVAILABLE,
+        )
+        session.add(ambulance)
+        await session.flush()
+
+    new_user = User(
+        email=normalized_email,
+        password_hash=hash_password(payload.password),
+        role=UserRole.AMBULANCE_CREW,
+        ambulance_id=ambulance.id,
+        is_active=True,
+    )
+    session.add(new_user)
+    await session.commit()
+    await session.refresh(new_user)
+
+    logger.info("New ambulance crew registered: %s (unit=%s)", new_user.email, clean_ident)
+    return UserResponse.model_validate(new_user)
 
 
 @router.post(
@@ -80,3 +136,4 @@ async def get_me(
     Never returns password hashes or access tokens.
     """
     return UserResponse.model_validate(current_user)
+

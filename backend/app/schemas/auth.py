@@ -40,3 +40,14 @@ class UserResponse(BaseModel):
     ambulance_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class AmbulanceCrewRegisterRequest(BaseModel):
+    """Registration payload for an ambulance crew member."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: EmailStr = Field(..., description="Crew member email address")
+    password: str = Field(..., min_length=8, description="Secure password (minimum 8 chars)")
+    ambulance_identifier: str = Field(..., min_length=2, max_length=100, description="Vehicle or unit call sign")
+    contact_number: str | None = Field(default=None, max_length=50, description="Contact phone number")

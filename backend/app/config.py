@@ -120,7 +120,7 @@ class Settings(BaseSettings):
         """Parse CORS_ORIGINS into a validated list of origins."""
         origins = [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
         for origin in origins:
-            if origin == "*":
+            if origin in ("*", "null"):
                 continue
             if not origin.startswith(("http://", "https://")):
                 raise ValueError(
