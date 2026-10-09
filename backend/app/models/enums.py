@@ -17,6 +17,19 @@ class UserRole(str, Enum):
     AMBULANCE_CREW = "AMBULANCE_CREW"
 
 
+class HospitalStatus(str, Enum):
+    """Registration / verification status of a hospital facility.
+
+    Hospitals created directly by an admin are APPROVED by default.
+    Self-registered hospitals start as PENDING until an administrator
+    approves or rejects the application.
+    """
+
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
 class AmbulanceStatus(str, Enum):
     """Operational status of an ambulance."""
 

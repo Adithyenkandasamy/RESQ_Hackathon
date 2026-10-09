@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 
 const TOKEN_KEY = 'ercs_auth_token';
 const USER_KEY = 'ercs_auth_user';
+const PATIENT_NOTES_COLLAPSED_KEY = 'resq_patient_notes_collapsed';
 
 export const SecureStorageService = {
   async saveToken(token: string): Promise<void> {
@@ -31,6 +32,37 @@ export const SecureStorageService = {
     } catch (e) {
       console.warn('Failed to read auth token from SecureStore:', e);
       return null;
+    }
+  },
+
+  async getPatientNotesCollapsed(): Promise<boolean> {
+    try {
+      if (Platform.OS === 'web') {
+        if (typeof localStorage !== 'undefined') {
+          return localStorage.getItem(PATIENT_NOTES_COLLAPSED_KEY) === 'true';
+        }
+        return false;
+      }
+      const value = await SecureStore.getItemAsync(PATIENT_NOTES_COLLAPSED_KEY);
+      return value === 'true';
+    } catch (e) {
+      console.warn('Failed to read patient notes preference:', e);
+      return false;
+    }
+  },
+
+  async setPatientNotesCollapsed(collapsed: boolean): Promise<void> {
+    try {
+      const value = String(collapsed);
+      if (Platform.OS === 'web') {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(PATIENT_NOTES_COLLAPSED_KEY, value);
+        }
+      } else {
+        await SecureStore.setItemAsync(PATIENT_NOTES_COLLAPSED_KEY, value);
+      }
+    } catch (e) {
+      console.warn('Failed to save patient notes preference:', e);
     }
   },
 

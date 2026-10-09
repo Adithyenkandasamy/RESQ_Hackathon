@@ -75,7 +75,7 @@ export function HospitalProfile() {
       <div className="space-y-6 max-w-4xl">
         <PageHeader
           title={hospital?.name || "Hospital Profile"}
-          subtitle="Configure hospital capacity, triage intake status, and trauma capabilities."
+          subtitle="Configure hospital capacity, triage intake status, and emergency capabilities."
         />
 
         {isLoading ? (
@@ -85,7 +85,7 @@ export function HospitalProfile() {
             {/* Facility Details (Read-only metadata) */}
             <div className="rounded-lg border border-outline-variant bg-white p-5 shadow-sm space-y-3">
               <h2 className="text-sm font-bold uppercase tracking-wider text-navy">
-                Hospital Identification & Trauma Accreditation
+                Hospital Identification & Department Status
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
                 <div>
@@ -94,7 +94,7 @@ export function HospitalProfile() {
                 </div>
                 <div>
                   <span className="font-semibold text-navy-secondary block">Accredited Capabilities</span>
-                  <p className="font-bold text-navy mt-0.5">{hospital?.capabilities?.join(", ") || "Trauma, Emergency, ICU"}</p>
+                  <p className="font-bold text-navy mt-0.5">{hospital?.capabilities?.join(", ") || "Emergency Care, ICU"}</p>
                 </div>
                 <div>
                   <span className="font-semibold text-navy-secondary block">Contact Number</span>
@@ -109,13 +109,13 @@ export function HospitalProfile() {
                 Operational Intake Status
               </h2>
               <p className="text-xs text-navy-secondary">
-                Setting your status to DIVERTING temporarily routes incoming emergencies to other trauma centers in the system.
+                Setting your status to DIVERTING temporarily routes incoming emergencies to other emergency facilities in the system.
               </p>
               <div className="flex flex-wrap gap-3 pt-2">
                 {[
-                  { key: "OPEN", label: "OPEN FOR ADMISSIONS", desc: "Accepting inbound trauma and ambulances" },
+                  { key: "OPEN", label: "OPEN FOR ADMISSIONS", desc: "Accepting inbound emergency patients and ambulances" },
                   { key: "AT_CAPACITY", label: "AT CAPACITY", desc: "ICU / Emergency department near limit" },
-                  { key: "DIVERTING", label: "DIVERTING (OVERLOAD)", desc: "Divert non-critical emergencies to other centers" },
+                  { key: "DIVERTING", label: "DIVERTING (OVERLOAD)", desc: "Divert non-critical emergencies to other facilities" },
                 ].map((s) => (
                   <button
                     key={s.key}

@@ -6,10 +6,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, DateTime, Float, Index, String
+from sqlalchemy import JSON, DateTime, Float, Index, String, Text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.models.enums import HospitalStatus
 
 if TYPE_CHECKING:
     from app.models.emergency import Emergency
@@ -43,6 +45,15 @@ class Hospital(Base):
 
     # Registered capabilities (e.g. ["ICU", "TRAUMA_LEVEL_1", "CARDIAC_CARE", "BURN_UNIT"])
     capabilities: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+
+    # Registration / verification lifecycle. New self-registrations are PENDING
+    # until an administrator approves or rejects the application.
+    status: Mapped[HospitalStatus] = mapped_column(
+        SAEnum(HospitalStatus, native_enum=False, length=50),
+        default=HospitalStatus.APPROVED,
+        nullable=False,
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Explicitly reported availability (e.g. {"icu_beds_available": 3, "accepting_patients": true})
     reported_availability: Mapped[dict[str, Any]] = mapped_column(

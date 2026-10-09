@@ -13,7 +13,8 @@ from app.core.auth import get_current_user
 from app.core.security import create_access_token, hash_password, verify_password
 from app.database import get_db_session
 from app.models.ambulance import Ambulance
-from app.models.enums import AmbulanceStatus, UserRole
+from app.models.enums import AmbulanceStatus, HospitalStatus, UserRole
+from app.models.hospital import Hospital
 from app.models.user import User
 from app.schemas.auth import (
     AmbulanceCrewRegisterRequest,
@@ -98,6 +99,33 @@ async def login(
             detail="Invalid email or password.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Hospitals self-register and must be approved before their staff can sign in.
+    if user.role == UserRole.HOSPITAL_STAFF and user.hospital_id is not None:
+        hospital_stmt = select(Hospital).where(Hospital.id == user.hospital_id)
+        hospital = (await session.execute(hospital_stmt)).scalar_one_or_none()
+        if hospital is not None and hospital.status != HospitalStatus.APPROVED:
+            if hospital.status == HospitalStatus.REJECTED:
+                detail = (
+                    "Your hospital registration was not approved. "
+                    + "Contact an administrator for details."
+                )
+            else:
+                detail = (
+                    "Your hospital registration is pending administrator approval. "
+                    + "You will be able to sign in once it is approved."
+                )
+            logger.info(
+                "Login blocked for user %s: hospital %s is %s",
+                user.id,
+                hospital.id,
+                hospital.status.value,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=detail,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     if not user.is_active:
         logger.warning("Login rejected for inactive user: %s", user.id)

@@ -57,7 +57,7 @@ export default function LoginScreen() {
           <View style={styles.iconCircle}>
             <Ambulance size={36} color="#FFFFFF" />
           </View>
-          <Text style={Typography.h1}>ERCS Mobile</Text>
+          <Text style={Typography.h1}>RESQ Mobile</Text>
           <Text style={styles.subtitle}>Ambulance Field Operations Station</Text>
         </View>
 

@@ -184,8 +184,11 @@ export default function HomeScreen() {
             <View style={styles.cardHeaderRow}>
               <View style={styles.missionTitleBox}>
                 <View style={styles.pingDot} />
-                <Text style={styles.activeCardTitle}>ACTIVE EMERGENCY IN PROGRESS</Text>
+                <Text style={styles.activeCardTitle}>ACTIVE EMERGENCY</Text>
               </View>
+            </View>
+            <View style={styles.missionDetailRow}>
+              <Text style={Typography.bodySmall}>Status:</Text>
               <StatusBadge
                 label={activeEmergency.status.replace(/_/g, ' ')}
                 type={
@@ -237,7 +240,7 @@ export default function HomeScreen() {
               <View style={styles.matchingBox}>
                 <Clock size={15} color={Colors.warning} />
                 <Text style={styles.matchingText}>
-                  Hospital dispatch matching in progress with trauma centers...
+                  Dispatch matching in progress with nearby emergency hospitals...
                 </Text>
               </View>
             )}
@@ -257,7 +260,7 @@ export default function HomeScreen() {
               <View style={{ marginLeft: Spacing.md, flex: 1 }}>
                 <Text style={Typography.h3}>Unit Stationed & Ready</Text>
                 <Text style={Typography.caption}>
-                  Logged into ERCS fleet. Awaiting field dispatch or call-in.
+                  Logged into RESQ fleet. Awaiting field dispatch or call-in.
                 </Text>
               </View>
             </View>

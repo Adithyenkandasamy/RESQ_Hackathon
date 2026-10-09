@@ -15,6 +15,7 @@ import { useEmergency } from '../../context/EmergencyContext';
 import { LocationService } from '../../services/location';
 import { EmergenciesApi } from '../../api/emergencies';
 import { MediaService } from '../../services/media';
+import { SecureStorageService } from '../../services/secureStorage';
 import { EmergencyStatus } from '../../types/emergency';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AppButton } from '../../components/AppButton';
@@ -37,6 +38,8 @@ import {
   Activity,
   Send,
   Square,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react-native';
 
 const STATUS_STEPS: { key: EmergencyStatus; label: string }[] = [
@@ -85,6 +88,7 @@ export default function ActiveEmergencyScreen() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isUpdatingNote, setIsUpdatingNote] = useState(false);
   const [recordTimer, setRecordTimer] = useState<any>(null);
+  const [patientCardCollapsed, setPatientCardCollapsed] = useState(false);
 
   React.useEffect(() => {
     if (activeEmergency) {
@@ -94,7 +98,16 @@ export default function ActiveEmergencyScreen() {
         '';
       setPatientNote(existing);
     }
+    SecureStorageService.getPatientNotesCollapsed()
+      .then(setPatientCardCollapsed)
+      .catch(() => {});
   }, [activeEmergency?.id]);
+
+  const togglePatientCard = async () => {
+    const next = !patientCardCollapsed;
+    setPatientCardCollapsed(next);
+    await SecureStorageService.setPatientNotesCollapsed(next);
+  };
 
   const startVoiceNote = async () => {
     const started = await MediaService.startAudioRecording();
@@ -334,66 +347,101 @@ export default function ActiveEmergencyScreen() {
               <Activity size={18} color={Colors.primaryBlue} />
               <Text style={styles.conditionTitle}>Patient Condition & Field Notes</Text>
             </View>
-            <View style={styles.liveBadge}>
-              <View style={styles.liveDot} />
-              <Text style={styles.liveText}>LIVE TO HOSPITAL</Text>
+            <View style={styles.conditionHeaderRight}>
+              <View style={styles.liveBadge}>
+                <View style={styles.liveDot} />
+                <Text style={styles.liveText}>LIVE TO HOSPITAL</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.collapseBtn}
+                onPress={togglePatientCard}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  patientCardCollapsed
+                    ? 'Expand patient condition notes'
+                    : 'Close patient condition notes'
+                }
+                activeOpacity={0.7}
+              >
+                {patientCardCollapsed ? (
+                  <ChevronDown size={18} color={Colors.secondaryText} />
+                ) : (
+                  <ChevronUp size={18} color={Colors.secondaryText} />
+                )}
+              </TouchableOpacity>
             </View>
           </View>
-          <Text style={styles.conditionHint}>
-            Describe current condition (conscious state, vitals, pain, injuries). Type or record voice note.
-          </Text>
 
-          <TextInput
-            style={styles.conditionInput}
-            multiline
-            numberOfLines={3}
-            placeholder="e.g. 52M, conscious, acute crushing chest pain radiating to left jaw, BP 140/90, SpO2 94%, given 325mg aspirin..."
-            placeholderTextColor={Colors.secondaryText}
-            value={patientNote}
-            onChangeText={setPatientNote}
-          />
-
-          <View style={styles.conditionActionsRow}>
-            {isRecording ? (
-              <TouchableOpacity
-                style={styles.recordingBtn}
-                onPress={stopVoiceNote}
-                activeOpacity={0.8}
-              >
-                <Square size={16} color="#FFFFFF" />
-                <Text style={styles.recordingBtnText}>
-                  Stop & Transcribe ({recordDuration}s)
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.voiceBtn}
-                onPress={startVoiceNote}
-                disabled={isTranscribing}
-                activeOpacity={0.8}
-              >
-                <Mic size={16} color={Colors.primaryBlue} />
-                <Text style={styles.voiceBtnText}>
-                  {isTranscribing ? 'Transcribing...' : 'Record Voice'}
-                </Text>
-              </TouchableOpacity>
-            )}
-
+          {patientCardCollapsed ? (
             <TouchableOpacity
-              style={[
-                styles.sendNoteBtn,
-                (!patientNote.trim() || isUpdatingNote) && styles.sendNoteBtnDisabled,
-              ]}
-              onPress={handleSendPatientNote}
-              disabled={!patientNote.trim() || isUpdatingNote}
-              activeOpacity={0.8}
+              style={styles.collapsedHint}
+              onPress={togglePatientCard}
+              activeOpacity={0.7}
             >
-              <Send size={15} color="#FFFFFF" />
-              <Text style={styles.sendNoteBtnText}>
-                {isUpdatingNote ? 'Sending...' : 'Send Live Update'}
+              <Text style={styles.collapsedHintText}>
+                Notes hidden. Tap to reopen and edit the latest field update.
               </Text>
             </TouchableOpacity>
-          </View>
+          ) : (
+            <>
+              <Text style={styles.conditionHint}>
+                Describe current condition (conscious state, vitals, pain, injuries). Type or record voice note.
+              </Text>
+
+              <TextInput
+                style={styles.conditionInput}
+                multiline
+                numberOfLines={3}
+                placeholder="e.g. 52M, conscious, acute crushing chest pain radiating to left jaw, BP 140/90, SpO2 94%, given 325mg aspirin..."
+                placeholderTextColor={Colors.secondaryText}
+                value={patientNote}
+                onChangeText={setPatientNote}
+              />
+
+              <View style={styles.conditionActionsRow}>
+                {isRecording ? (
+                  <TouchableOpacity
+                    style={styles.recordingBtn}
+                    onPress={stopVoiceNote}
+                    activeOpacity={0.8}
+                  >
+                    <Square size={16} color="#FFFFFF" />
+                    <Text style={styles.recordingBtnText}>
+                      Stop & Transcribe ({recordDuration}s)
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.voiceBtn}
+                    onPress={startVoiceNote}
+                    disabled={isTranscribing}
+                    activeOpacity={0.8}
+                  >
+                    <Mic size={16} color={Colors.primaryBlue} />
+                    <Text style={styles.voiceBtnText}>
+                      {isTranscribing ? 'Transcribing...' : 'Record Voice'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={[
+                    styles.sendNoteBtn,
+                    (!patientNote.trim() || isUpdatingNote) && styles.sendNoteBtnDisabled,
+                  ]}
+                  onPress={handleSendPatientNote}
+                  disabled={!patientNote.trim() || isUpdatingNote}
+                  activeOpacity={0.8}
+                >
+                  <Send size={15} color="#FFFFFF" />
+                  <Text style={styles.sendNoteBtnText}>
+                    {isUpdatingNote ? 'Sending...' : 'Send Live Update'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </View>
 
         {/* Paramedic Fast Action Grid */}
@@ -591,6 +639,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 1,
+  },
+  conditionHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  collapseBtn: {
+    padding: 2,
+  },
+  collapsedHint: {
+    marginTop: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    backgroundColor: Colors.mainBackground,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.borders,
+  },
+  collapsedHintText: {
+    ...Typography.caption,
+    color: Colors.secondaryText,
   },
   conditionTitle: {
     ...Typography.bodySmall,

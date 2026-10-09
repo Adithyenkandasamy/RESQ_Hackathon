@@ -4,6 +4,8 @@ import type {
   HospitalCreate,
   HospitalUpdate,
   HospitalAvailabilityUpdate,
+  HospitalRegisterRequest,
+  HospitalRegisterResponse,
   PaginatedResponse,
 } from "./types";
 
@@ -14,6 +16,12 @@ export function listHospitals(params?: {
   page_size?: number;
 }): Promise<PaginatedResponse<HospitalResponse>> {
   return apiGet<PaginatedResponse<HospitalResponse>>(BASE, { params });
+}
+
+export function registerHospital(
+  payload: HospitalRegisterRequest
+): Promise<HospitalRegisterResponse> {
+  return apiPost<HospitalRegisterResponse>(`${BASE}/register`, payload);
 }
 
 export function createHospital(payload: HospitalCreate): Promise<HospitalResponse> {

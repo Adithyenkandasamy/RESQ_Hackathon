@@ -21,7 +21,7 @@ export default function IndexScreen() {
 
   return (
     <View style={styles.container}>
-      <LoadingState message="Connecting to ERCS Core..." />
+      <LoadingState message="Connecting to RESQ Core..." />
     </View>
   );
 }

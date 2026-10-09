@@ -1,14 +1,28 @@
 import * as ImagePicker from 'expo-image-picker';
 
-// Safely obtain Audio module without crashing if ExponentAV native module is missing in Expo Go
+// Safely obtain Audio module without crashing if ExponentAV native module is missing in Expo Go.
+// Cache the result so we only try once.
+// IMPORTANT: We use string concatenation ('expo' + '-av') to prevent Metro from statically
+// resolving this dependency at bundle time, which would cause it to throw during module evaluation.
+let _audioModule: any = undefined; // undefined = not tried, null = unavailable
 function getAudio() {
+  if (_audioModule !== undefined) return _audioModule;
   try {
+    // Defeat Metro static analysis so this is truly lazy
+    const moduleName = 'expo' + '-av';
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const expoAv = require('expo-av');
-    return expoAv?.Audio || null;
-  } catch (err) {
-    return null;
+    const expoAv = require(moduleName);
+    // expo-av may load but throw when accessing Audio internals if native module is missing.
+    // Probe it now to fail fast in this safe catch block.
+    if (expoAv?.Audio?.requestPermissionsAsync) {
+      _audioModule = expoAv.Audio;
+    } else {
+      _audioModule = null;
+    }
+  } catch {
+    _audioModule = null;
   }
+  return _audioModule;
 }
 
 export interface CapturedImage {

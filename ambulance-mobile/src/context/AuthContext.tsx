@@ -55,7 +55,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         socketService.connect(amb.id);
       }
     } catch (e) {
-      console.warn('Failed to restore auth session:', e);
+      console.log('Session refresh note:', (e as any)?.message || e);
       await logout();
     } finally {
       setIsLoading(false);

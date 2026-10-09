@@ -110,7 +110,7 @@ export function HospitalDashboard() {
         {/* Header with Hospital Info */}
         <PageHeader
           title={hospital?.name || "Hospital Emergency Command"}
-          subtitle={`Trauma Facility • Operational Status: ${opStatus}`}
+          subtitle={`Emergency Medical Facility • Operational Status: ${opStatus}`}
           actions={
             <div className="flex items-center gap-3">
               <button
@@ -291,12 +291,12 @@ export function HospitalDashboard() {
                           <div className="mt-3 flex items-center gap-3 rounded bg-white p-2.5 border border-[#006194]/20">
                             <img
                               src={(patientInfo as any)?.image_url || (patientInfo as any).images[0]}
-                              alt="Trauma Scene"
+                              alt="Patient Condition Photo"
                               className="h-16 w-16 rounded object-cover border border-outline-variant shadow-xs shrink-0"
                             />
                             <div>
-                              <span className="text-xs font-bold text-navy block">📷 Patient / Trauma Photo Attached</span>
-                              <span className="text-[11px] text-navy-secondary">Direct photographic capture transmitted by ambulance helper</span>
+                              <span className="text-xs font-bold text-navy block">📷 Patient Condition Photo Attached</span>
+                              <span className="text-[11px] text-navy-secondary">Direct photographic capture transmitted by ambulance crew</span>
                             </div>
                           </div>
                         )}
@@ -344,7 +344,7 @@ export function HospitalDashboard() {
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                             </svg>
                           )}
-                          <span>ACCEPT & PREPARE TRAUMA BAY</span>
+                          <span>ACCEPT ADMISSION & PREPARE TEAM</span>
                         </button>
                       </div>
                     </div>

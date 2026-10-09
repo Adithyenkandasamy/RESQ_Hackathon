@@ -7,6 +7,8 @@
 
 export type UserRole = "ADMIN" | "HOSPITAL_STAFF" | "AMBULANCE_CREW";
 
+export type HospitalStatus = "PENDING" | "APPROVED" | "REJECTED";
+
 export type EmergencyStatus =
   | "CREATED"
   | "ASSESSMENT_IN_PROGRESS"
@@ -67,6 +69,8 @@ export interface HospitalResponse {
   longitude: number;
   contact_number: string;
   capabilities: string[];
+  status: HospitalStatus;
+  rejection_reason: string | null;
   reported_availability: Record<string, unknown>;
   availability_updated_at: string | null;
   created_at: string;
@@ -95,6 +99,38 @@ export interface HospitalUpdate {
 
 export interface HospitalAvailabilityUpdate {
   reported_availability: Record<string, unknown>;
+}
+
+// ── Hospital Registration / Approval ──────────────────────────────
+
+export interface HospitalRegisterRequest {
+  name: string;
+  registration_identifier: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  contact_number: string;
+  capabilities?: string[];
+  applicant_email: string;
+  password: string;
+}
+
+export interface HospitalRegisterResponse {
+  hospital_id: string;
+  name: string;
+  registration_identifier: string;
+  status: HospitalStatus;
+  applicant_email: string;
+  message: string;
+}
+
+export interface HospitalRegistrationResponse {
+  hospital: HospitalResponse;
+  applicant_email: string | null;
+}
+
+export interface HospitalRegistrationDecision {
+  reason?: string | null;
 }
 
 // ── Ambulances ────────────────────────────────────────────────────
