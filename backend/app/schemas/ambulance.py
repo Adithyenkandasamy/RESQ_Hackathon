@@ -35,6 +35,18 @@ class AmbulanceAvailabilityUpdate(BaseModel):
     )
 
 
+class AmbulanceLocationUpdate(BaseModel):
+    """Payload to update live ambulance device coordinates."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    latitude: float = Field(..., ge=-90.0, le=90.0, description="Ambulance GPS latitude")
+    longitude: float = Field(..., ge=-180.0, le=180.0, description="Ambulance GPS longitude")
+    timestamp: datetime | None = Field(
+        None, description="Client capture timestamp"
+    )
+
+
 class AmbulanceResponse(BaseModel):
     """Ambulance profile response."""
 
@@ -44,5 +56,8 @@ class AmbulanceResponse(BaseModel):
     registration_identifier: str
     contact_number: str | None = None
     operational_status: AmbulanceStatus
+    latitude: float | None = None
+    longitude: float | None = None
+    location_updated_at: datetime | None = None
     created_at: datetime
     updated_at: datetime

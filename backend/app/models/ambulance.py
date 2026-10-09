@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String
+from sqlalchemy import DateTime, Float, String
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -37,6 +37,11 @@ class Ambulance(Base):
         SAEnum(AmbulanceStatus, native_enum=False, length=50),
         default=AmbulanceStatus.AVAILABLE,
         nullable=False,
+    )
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    location_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     created_at: Mapped[datetime] = mapped_column(

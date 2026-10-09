@@ -14,4 +14,15 @@ export const AmbulanceApi = {
       body: { operational_status: status },
     });
   },
+
+  async updateLocation(latitude: number, longitude: number): Promise<Ambulance> {
+    return apiClient<Ambulance>('/ambulances/me/location', {
+      method: 'PATCH',
+      body: {
+        latitude,
+        longitude,
+        timestamp: new Date().toISOString(),
+      },
+    });
+  },
 };

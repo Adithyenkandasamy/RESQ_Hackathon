@@ -16,6 +16,7 @@ from app.models.enums import UserRole
 from app.models.user import User
 from app.schemas.ambulance import (
     AmbulanceAvailabilityUpdate,
+    AmbulanceLocationUpdate,
     AmbulanceResponse,
 )
 
@@ -90,5 +91,56 @@ async def update_ambulance_availability(
         "Ambulance %s operational status updated to: %s",
         ambulance.id,
         ambulance.operational_status.value,
+    )
+    return AmbulanceResponse.model_validate(ambulance)
+
+
+@router.patch(
+    "/me/location",
+    response_model=AmbulanceResponse,
+    summary="Update live ambulance GPS location",
+)
+async def update_ambulance_location(
+    payload: AmbulanceLocationUpdate,
+    current_user: User = Depends(require_roles(UserRole.AMBULANCE_CREW)),
+    session: AsyncSession = Depends(get_db_session),
+) -> AmbulanceResponse:
+    """Update live device coordinates and synchronization timestamp for the assigned ambulance."""
+    if current_user.ambulance_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No ambulance assigned to this user account.",
+        )
+
+    stmt = select(Ambulance).where(Ambulance.id == current_user.ambulance_id)
+    result = await session.execute(stmt)
+    ambulance = result.scalar_one_or_none()
+
+    if ambulance is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assigned ambulance not found.",
+        )
+
+    now = datetime.now(timezone.utc)
+    incoming_ts = payload.timestamp or now
+
+    # Prevent older / out-of-order GPS readings from overwriting fresh coordinates
+    if ambulance.location_updated_at is not None and incoming_ts < ambulance.location_updated_at:
+        return AmbulanceResponse.model_validate(ambulance)
+
+    ambulance.latitude = payload.latitude
+    ambulance.longitude = payload.longitude
+    ambulance.location_updated_at = incoming_ts
+    ambulance.updated_at = now
+
+    await session.commit()
+    await session.refresh(ambulance)
+
+    logger.debug(
+        "Ambulance %s GPS location synchronized: lat=%s, lng=%s",
+        ambulance.id,
+        ambulance.latitude,
+        ambulance.longitude,
     )
     return AmbulanceResponse.model_validate(ambulance)

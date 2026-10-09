@@ -33,10 +33,15 @@ export interface Emergency {
   id: string;
   created_by_id: string;
   severity_level: EmergencySeverity;
+  incident_type?: string;
   status: EmergencyStatus;
   location_description: string | null;
+  incident_description?: string | null;
   latitude: number | null;
   longitude: number | null;
+  incident_latitude?: number | null;
+  incident_longitude?: number | null;
+  location_captured_at?: string | null;
   assigned_ambulance_id: string | null;
   confirmed_hospital_id: string | null;
   required_capabilities: string[];
@@ -49,10 +54,14 @@ export interface Emergency {
 }
 
 export interface EmergencyCreatePayload {
-  severity_level: EmergencySeverity;
+  severity_level?: EmergencySeverity;
+  incident_type?: string;
   location_description?: string;
+  incident_description?: string;
   latitude?: number;
   longitude?: number;
+  incident_latitude?: number;
+  incident_longitude?: number;
   assigned_ambulance_id?: string;
   required_capabilities?: string[];
   patient_info?: PatientInfo;
