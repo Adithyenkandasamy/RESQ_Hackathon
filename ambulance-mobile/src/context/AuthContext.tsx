@@ -4,6 +4,7 @@ import { Ambulance, AmbulanceStatus } from '../types/ambulance';
 import { AuthApi } from '../api/auth';
 import { AmbulanceApi } from '../api/ambulance';
 import { SecureStorageService } from '../services/secureStorage';
+import { LocationService } from '../services/location';
 import { setOnUnauthorized } from '../api/client';
 import { socketService } from '../services/socket';
 
@@ -28,6 +29,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const logout = useCallback(async () => {
+    LocationService.stopLiveTracking();
     await SecureStorageService.clearToken();
     socketService.disconnect();
     setToken(null);

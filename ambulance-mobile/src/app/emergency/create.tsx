@@ -10,6 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEmergency } from '../../context/EmergencyContext';
 import { LocationService } from '../../services/location';
 import { EmergencySeverity } from '../../types/emergency';
@@ -40,20 +41,28 @@ const PATIENT_PRESETS = ['Male Adult', 'Female Adult', 'Child / Pediatric', 'Unk
 
 export default function CreateEmergencyScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { createEmergency } = useEmergency();
 
   const [loading, setLoading] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
 
+  // Read cached GPS from continuous tracking service
+  const initialLoc = LocationService.getCachedLocation();
+
   // Minimal Emergency Fields
   const [severity, setSeverity] = useState<EmergencySeverity>('CRITICAL');
   const [chiefComplaint, setChiefComplaint] = useState('Cardiac Arrest / Chest Pain');
   const [patientDemographic, setPatientDemographic] = useState('Unknown');
-  const [latitude, setLatitude] = useState(13.0827);
-  const [longitude, setLongitude] = useState(80.2707);
-  const [locationLabel, setLocationLabel] = useState('Auto GPS (Field Incident)');
+  const [latitude, setLatitude] = useState<number | null>(initialLoc?.latitude ?? null);
+  const [longitude, setLongitude] = useState<number | null>(initialLoc?.longitude ?? null);
+  const [locationLabel, setLocationLabel] = useState(
+    initialLoc
+      ? `${initialLoc.latitude.toFixed(4)}, ${initialLoc.longitude.toFixed(4)}`
+      : 'Acquiring GPS...'
+  );
 
-  // Auto-acquire GPS coordinates on mount
+  // Auto-acquire fresh GPS coordinates on mount
   useEffect(() => {
     fetchCurrentGPS();
   }, []);
@@ -62,13 +71,15 @@ export default function CreateEmergencyScreen() {
     setGpsLoading(true);
     try {
       const loc = await LocationService.getCurrentLocation();
-      if (loc) {
+      if (loc && LocationService.isValidCoordinate(loc.latitude, loc.longitude)) {
         setLatitude(loc.latitude);
         setLongitude(loc.longitude);
         setLocationLabel(`${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`);
+      } else {
+        setLocationLabel('GPS signal unavailable (check permissions)');
       }
     } catch {
-      // Fallback coordinates retained
+      setLocationLabel('GPS signal unavailable');
     } finally {
       setGpsLoading(false);
     }
@@ -76,6 +87,19 @@ export default function CreateEmergencyScreen() {
 
   const handleDispatch = async () => {
     if (loading) return;
+
+    if (latitude === null || longitude === null || !LocationService.isValidCoordinate(latitude, longitude)) {
+      Alert.alert(
+        'GPS Acquisition Required',
+        'Accurate device GPS coordinates are required before dispatching emergency services. Please enable location services and tap Refresh GPS.',
+        [
+          { text: 'Refresh GPS', onPress: fetchCurrentGPS },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+
     setLoading(true);
     try {
       const capabilities: string[] = [];
@@ -100,7 +124,6 @@ export default function CreateEmergencyScreen() {
     } catch (err: any) {
       const msg = (err?.message || '').toLowerCase();
       if (msg.includes('cancel') || msg.includes('abort') || err?.status === 499) {
-        // If request succeeded or was superseded by navigation, transition safely
         router.replace('/emergency/active');
         return;
       }
@@ -110,13 +133,16 @@ export default function CreateEmergencyScreen() {
     }
   };
 
+  const safeTop = Math.max(insets.top, Platform.OS === 'android' ? 24 : 0);
+  const safeBottom = Math.max(insets.bottom, Spacing.base);
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.fixedScreen}
     >
-      {/* Top Header */}
-      <View style={styles.topHeader}>
+      {/* Top Header with Safe Area Inset */}
+      <View style={[styles.topHeader, { paddingTop: safeTop + 10 }]}>
         <View>
           <Text style={styles.screenTitle}>Rapid Emergency Dispatch</Text>
           <Text style={styles.screenSubtitle}>Instant 1-Tap Hospital Coordination</Text>
@@ -279,7 +305,7 @@ export default function CreateEmergencyScreen() {
       </ScrollView>
 
       {/* Pinned Bottom Dispatch Action */}
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { paddingBottom: safeBottom }]}>
         <AppButton
           title={loading ? 'DISPATCHING TO HOSPITALS...' : 'DISPATCH EMERGENCY NOW'}
           onPress={handleDispatch}

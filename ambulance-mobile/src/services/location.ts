@@ -76,19 +76,28 @@ export const LocationService = {
     }
   },
 
-  async syncWithBackend(coords: LocationCoordinates): Promise<boolean> {
+  async syncWithBackend(coords?: LocationCoordinates | null): Promise<boolean> {
     try {
-      if (!this.validateCoordinates(coords.latitude, coords.longitude)) {
+      const targetCoords = coords || (await this.getCurrentLocation());
+      if (!targetCoords || !this.validateCoordinates(targetCoords.latitude, targetCoords.longitude)) {
         return false;
       }
-      await AmbulanceApi.updateLocation(coords.latitude, coords.longitude);
+      await AmbulanceApi.updateLocation(targetCoords.latitude, targetCoords.longitude);
       lastSyncTimestamp = Date.now();
-      lastSyncedCoordinates = coords;
+      lastSyncedCoordinates = targetCoords;
       return true;
     } catch (err) {
       console.warn('Failed to sync ambulance location with backend:', err);
       return false;
     }
+  },
+
+  getCachedLocation(): LocationCoordinates | null {
+    return lastSyncedCoordinates;
+  },
+
+  isValidCoordinate(latitude: number, longitude: number): boolean {
+    return this.validateCoordinates(latitude, longitude);
   },
 
   async startLiveTracking(

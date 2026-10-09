@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useEmergency } from '../../context/EmergencyContext';
+import { LocationService } from '../../services/location';
 import { EmergencyStatus } from '../../types/emergency';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AppButton } from '../../components/AppButton';
@@ -252,6 +253,14 @@ export default function ActiveEmergencyScreen() {
                     latitude: confirmedHospital.latitude,
                     longitude: confirmedHospital.longitude,
                     label: confirmedHospital.name,
+                  }
+                : null
+            }
+            ambulanceLocation={
+              LocationService.getCachedLocation()
+                ? {
+                    latitude: LocationService.getCachedLocation()!.latitude,
+                    longitude: LocationService.getCachedLocation()!.longitude,
                   }
                 : null
             }

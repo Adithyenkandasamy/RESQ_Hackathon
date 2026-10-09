@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,13 +6,16 @@ import {
   StyleSheet,
   TouchableOpacity,
   RefreshControl,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { useEmergency } from '../../context/EmergencyContext';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AppButton } from '../../components/AppButton';
 import { MapViewComponent } from '../../components/MapViewComponent';
+import { LocationService, LocationCoordinates } from '../../services/location';
 import { Colors } from '../../constants/colors';
 import { Spacing, BorderRadius, Shadows } from '../../constants/spacing';
 import { Typography } from '../../constants/typography';
@@ -26,17 +29,56 @@ import {
   Shield,
   Building2,
   MapPin,
+  RefreshCw,
+  Navigation,
 } from 'lucide-react-native';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { user, ambulance, updateAvailability, refreshProfile } = useAuth();
-  const { activeEmergency, confirmedHospital, isLoading, refreshActiveEmergency } = useEmergency();
+  const { activeEmergency, confirmedHospital, refreshActiveEmergency } = useEmergency();
+
   const [refreshing, setRefreshing] = useState(false);
+  const [currentGps, setCurrentGps] = useState<LocationCoordinates | null>(null);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('Not synced');
+
+  const safeTop = Math.max(insets.top, Platform.OS === 'android' ? 24 : 0);
+
+  // Sync GPS on mount and track while on duty
+  const refreshGps = useCallback(async () => {
+    setGpsLoading(true);
+    try {
+      const loc = await LocationService.getCurrentLocation();
+      if (loc) {
+        setCurrentGps(loc);
+        await LocationService.syncWithBackend(loc);
+        setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      }
+    } catch (e) {
+      console.warn('GPS refresh failed:', e);
+    } finally {
+      setGpsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshGps();
+    // Start continuous location tracking while in duty
+    LocationService.startLiveTracking((coords) => {
+      setCurrentGps(coords);
+      setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    });
+
+    return () => {
+      LocationService.stopLiveTracking();
+    };
+  }, [refreshGps]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refreshProfile(), refreshActiveEmergency()]);
+    await Promise.all([refreshProfile(), refreshActiveEmergency(), refreshGps()]);
     setRefreshing(false);
   };
 
@@ -48,32 +90,34 @@ export default function HomeScreen() {
     await updateAvailability(nextStatus);
   };
 
+  const freshness = LocationService.getFreshness(currentGps?.timestamp);
+
   return (
     <View style={styles.container}>
-      {/* Top Bar */}
-      <View style={styles.header}>
+      {/* Safe Area Top Header */}
+      <View style={[styles.header, { paddingTop: safeTop + 10 }]}>
         <View style={styles.headerLeft}>
           <View style={styles.unitBadge}>
             <AmbulanceIcon size={18} color={Colors.primaryBlue} />
             <Text style={styles.unitText}>
-              {ambulance ? ambulance.registration_identifier : 'Unit Loading'}
+              {ambulance ? ambulance.registration_identifier : 'Unit Loading...'}
             </Text>
           </View>
           <Text style={styles.crewEmail} numberOfLines={1}>
-            {user?.email}
+            {user?.email || 'Authenticated Crew'}
           </Text>
         </View>
 
         <TouchableOpacity
-          style={[styles.statusToggle, isAvailable ? styles.statusAvail : styles.statusOff]}
+          style={[styles.statusToggle, isAvailable ? styles.statusAvail : styles.statusBusy]}
           onPress={toggleAvailability}
           activeOpacity={0.8}
         >
-          <Radio size={14} color={isAvailable ? Colors.medicalGreen : Colors.secondaryText} />
+          <Radio size={13} color={isAvailable ? Colors.medicalGreen : Colors.warning} />
           <Text
             style={[
               styles.statusToggleText,
-              { color: isAvailable ? Colors.medicalGreen : Colors.secondaryText },
+              { color: isAvailable ? Colors.medicalGreen : Colors.warning },
             ]}
           >
             {ambulance?.operational_status || 'UNKNOWN'}
@@ -84,7 +128,57 @@ export default function HomeScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
       >
+        {/* Live GPS Telemetry Status Banner */}
+        <View style={styles.gpsCard}>
+          <View style={styles.gpsRow}>
+            <View style={styles.gpsIndicator}>
+              <View
+                style={[
+                  styles.gpsDot,
+                  {
+                    backgroundColor:
+                      freshness === 'LIVE'
+                        ? Colors.medicalGreen
+                        : freshness === 'RECENT'
+                        ? Colors.primaryBlue
+                        : Colors.warning,
+                  },
+                ]}
+              />
+              <Text style={styles.gpsLabel}>GPS Telemetry:</Text>
+              <Text style={styles.gpsStatusValue}>{freshness}</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.gpsRefreshBtn}
+              onPress={refreshGps}
+              disabled={gpsLoading}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <RefreshCw
+                size={14}
+                color={Colors.primaryBlue}
+                style={gpsLoading ? { opacity: 0.5 } : undefined}
+              />
+              <Text style={styles.gpsRefreshText}>{gpsLoading ? 'Acquiring...' : 'Sync GPS'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.gpsCoordsRow}>
+            <MapPin size={14} color={Colors.secondaryText} />
+            <Text style={styles.coordsText}>
+              {currentGps
+                ? `${currentGps.latitude.toFixed(5)}, ${currentGps.longitude.toFixed(5)}`
+                : ambulance?.latitude && ambulance?.longitude
+                ? `${ambulance.latitude.toFixed(5)}, ${ambulance.longitude.toFixed(5)} (Server)`
+                : 'Acquiring device satellite coordinates...'}
+            </Text>
+            <Text style={styles.syncTimestampText}>• Last: {lastSyncTime}</Text>
+          </View>
+        </View>
+
         {/* ACTIVE MISSION CARD (If present) */}
         {activeEmergency ? (
           <View style={styles.activeCard}>
@@ -94,7 +188,7 @@ export default function HomeScreen() {
                 <Text style={styles.activeCardTitle}>ACTIVE EMERGENCY IN PROGRESS</Text>
               </View>
               <StatusBadge
-                label={activeEmergency.status}
+                label={activeEmergency.status.replace(/_/g, ' ')}
                 type={
                   activeEmergency.status === 'HOSPITAL_ASSIGNED'
                     ? 'success'
@@ -107,22 +201,24 @@ export default function HomeScreen() {
 
             <View style={styles.missionDetailRow}>
               <Text style={Typography.bodySmall}>Incident ID:</Text>
-              <Text style={Typography.mono}>{activeEmergency.id.slice(0, 8)}</Text>
+              <Text style={Typography.mono}>#{activeEmergency.id.slice(0, 8)}</Text>
             </View>
 
             <View style={styles.missionDetailRow}>
-              <Text style={Typography.bodySmall}>Severity:</Text>
+              <Text style={Typography.bodySmall}>Priority:</Text>
               <StatusBadge
-                label={activeEmergency.severity_level}
-                type={activeEmergency.severity_level === 'CRITICAL' ? 'error' : 'warning'}
+                label={activeEmergency.severity_level || activeEmergency.incident_type || 'CRITICAL'}
+                type={
+                  activeEmergency.severity_level === 'CRITICAL' ? 'error' : 'warning'
+                }
               />
             </View>
 
-            {activeEmergency.location_description && (
+            {(activeEmergency.location_description || activeEmergency.incident_description) && (
               <View style={styles.locationSnippet}>
-                <MapPin size={16} color={Colors.secondaryText} />
-                <Text style={[Typography.bodySmall, { marginLeft: 6, flex: 1 }]}>
-                  {activeEmergency.location_description}
+                <MapPin size={15} color={Colors.primaryBlue} />
+                <Text style={[Typography.bodySmall, { marginLeft: 6, flex: 1, color: Colors.primaryText }]}>
+                  {activeEmergency.location_description || activeEmergency.incident_description}
                 </Text>
               </View>
             )}
@@ -134,27 +230,32 @@ export default function HomeScreen() {
                   <Building2 size={18} color={Colors.medicalGreen} />
                   <Text style={styles.confirmedHospitalName}>{confirmedHospital.name}</Text>
                 </View>
-                <Text style={[Typography.bodySmall, { marginTop: 4 }]}>
+                <Text style={[Typography.caption, { marginTop: 3, color: Colors.secondaryText }]}>
                   {confirmedHospital.address}
                 </Text>
               </View>
             ) : (
               <View style={styles.matchingBox}>
-                <Clock size={16} color={Colors.warning} />
+                <Clock size={15} color={Colors.warning} />
                 <Text style={styles.matchingText}>
-                  Hospital dispatch matching in progress with triage centers...
+                  Hospital dispatch matching in progress with trauma centers...
                 </Text>
               </View>
             )}
 
-            {/* Mini Tactical Map */}
-            {activeEmergency.latitude && activeEmergency.longitude && (
+            {/* Tactical Leaflet Map with verified real coordinates */}
+            {(activeEmergency.latitude || activeEmergency.incident_latitude) && (
               <MapViewComponent
                 incidentLocation={{
-                  latitude: activeEmergency.latitude,
-                  longitude: activeEmergency.longitude,
+                  latitude: (activeEmergency.latitude || activeEmergency.incident_latitude)!,
+                  longitude: (activeEmergency.longitude || activeEmergency.incident_longitude)!,
                   label: 'Incident Scene',
                 }}
+                ambulanceLocation={
+                  currentGps
+                    ? { latitude: currentGps.latitude, longitude: currentGps.longitude }
+                    : null
+                }
                 hospitalLocation={
                   confirmedHospital && confirmedHospital.latitude && confirmedHospital.longitude
                     ? {
@@ -176,14 +277,14 @@ export default function HomeScreen() {
             />
           </View>
         ) : (
-          /* NO ACTIVE EMERGENCY — SHOW PRIMARY CTA */
+          /* NO ACTIVE EMERGENCY — READY STATE */
           <View style={styles.readyCard}>
             <View style={styles.readyHeader}>
-              <CheckCircle2 size={32} color={Colors.medicalGreen} />
-              <View style={{ marginLeft: Spacing.md }}>
-                <Text style={Typography.h2}>Unit Ready for Dispatch</Text>
-                <Text style={Typography.bodySmall}>
-                  Stationed and awaiting emergency field incident assignment.
+              <CheckCircle2 size={30} color={Colors.medicalGreen} />
+              <View style={{ marginLeft: Spacing.md, flex: 1 }}>
+                <Text style={Typography.h3}>Unit Stationed & Ready</Text>
+                <Text style={Typography.caption}>
+                  Logged into ERCS fleet. Awaiting field dispatch or call-in.
                 </Text>
               </View>
             </View>
@@ -200,9 +301,9 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Quick Operational Shortcuts */}
+        {/* Field Operations Section */}
         <View style={styles.sectionHeader}>
-          <Text style={Typography.h3}>Field Operations</Text>
+          <Text style={styles.sectionTitle}>Field Operations</Text>
         </View>
 
         <View style={styles.shortcutsGrid}>
@@ -212,10 +313,10 @@ export default function HomeScreen() {
             activeOpacity={0.8}
           >
             <View style={[styles.shortcutIconBox, { backgroundColor: Colors.lightBlue }]}>
-              <Clock size={22} color={Colors.primaryBlue} />
+              <Clock size={20} color={Colors.primaryBlue} />
             </View>
             <Text style={styles.shortcutTitle}>Shift History</Text>
-            <Text style={Typography.bodySmall}>Review past dispatches and handovers</Text>
+            <Text style={Typography.caption}>Review completed handovers</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -224,10 +325,10 @@ export default function HomeScreen() {
             activeOpacity={0.8}
           >
             <View style={[styles.shortcutIconBox, { backgroundColor: Colors.lightGreen }]}>
-              <Shield size={22} color={Colors.medicalGreen} />
+              <Shield size={20} color={Colors.medicalGreen} />
             </View>
             <Text style={styles.shortcutTitle}>Unit Readiness</Text>
-            <Text style={Typography.bodySmall}>Manage operational state & vehicle details</Text>
+            <Text style={Typography.caption}>Manage vehicle & status</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -245,8 +346,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: Spacing.base,
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.md,
+    paddingBottom: Spacing.sm,
     backgroundColor: Colors.cardBackground,
     borderBottomWidth: 1,
     borderBottomColor: Colors.borders,
@@ -258,40 +358,105 @@ const styles = StyleSheet.create({
   unitBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
   unitText: {
     ...Typography.h3,
+    fontSize: 16,
     color: Colors.darkNavy,
+    marginLeft: 6,
   },
   crewEmail: {
-    ...Typography.bodySmall,
+    ...Typography.caption,
     color: Colors.secondaryText,
-    marginTop: 2,
+    marginTop: 1,
   },
   statusToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
     borderRadius: BorderRadius.full,
     borderWidth: 1,
+    gap: 5,
   },
   statusAvail: {
     backgroundColor: Colors.lightGreen,
     borderColor: 'rgba(22, 163, 74, 0.3)',
   },
-  statusOff: {
-    backgroundColor: '#F1F5F9',
-    borderColor: Colors.borders,
+  statusBusy: {
+    backgroundColor: '#FFFBEB',
+    borderColor: 'rgba(217, 119, 6, 0.3)',
   },
   statusToggleText: {
     ...Typography.caption,
     fontWeight: '700',
+    fontSize: 11,
   },
   scrollContent: {
     padding: Spacing.base,
+    paddingBottom: Spacing.xxl,
+  },
+  gpsCard: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: BorderRadius.md,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.borders,
+    marginBottom: Spacing.md,
+    ...Shadows.subtle,
+  },
+  gpsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  gpsIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  gpsDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  gpsLabel: {
+    ...Typography.caption,
+    color: Colors.secondaryText,
+    fontWeight: '600',
+  },
+  gpsStatusValue: {
+    ...Typography.caption,
+    color: Colors.darkNavy,
+    fontWeight: '700',
+  },
+  gpsRefreshBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  gpsRefreshText: {
+    ...Typography.caption,
+    color: Colors.primaryBlue,
+    fontWeight: '700',
+  },
+  gpsCoordsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
+  },
+  coordsText: {
+    ...Typography.caption,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    color: Colors.primaryText,
+    fontSize: 11,
+  },
+  syncTimestampText: {
+    ...Typography.caption,
+    color: Colors.secondaryText,
+    fontSize: 10,
   },
   activeCard: {
     backgroundColor: Colors.cardBackground,
@@ -299,25 +464,25 @@ const styles = StyleSheet.create({
     padding: Spacing.base,
     borderWidth: 1.5,
     borderColor: Colors.primaryBlue,
-    ...Shadows.card,
     marginBottom: Spacing.lg,
+    ...Shadows.card,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   missionTitleBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
   },
   pingDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: Colors.error,
+    marginRight: 6,
   },
   activeCardTitle: {
     ...Typography.caption,
@@ -329,92 +494,100 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.xs,
+    paddingVertical: 3,
   },
   locationSnippet: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    padding: Spacing.sm,
+    backgroundColor: Colors.lightBlue,
     borderRadius: BorderRadius.sm,
-    marginVertical: Spacing.xs,
+    padding: Spacing.sm,
+    marginVertical: Spacing.sm,
   },
   confirmedBox: {
     backgroundColor: Colors.lightGreen,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.sm,
+    marginBottom: Spacing.sm,
     borderWidth: 1,
-    borderColor: 'rgba(22, 163, 74, 0.3)',
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginVertical: Spacing.sm,
+    borderColor: 'rgba(22, 163, 74, 0.2)',
   },
   confirmedHospitalName: {
-    ...Typography.h3,
+    ...Typography.bodySmall,
+    fontWeight: '700',
     color: Colors.medicalGreen,
     marginLeft: 6,
   },
   matchingBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: Colors.warningLight,
-    borderWidth: 1,
-    borderColor: 'rgba(217, 119, 6, 0.25)',
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    marginVertical: Spacing.sm,
+    backgroundColor: '#FFFBEB',
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.sm,
+    marginBottom: Spacing.sm,
+    gap: 6,
   },
   matchingText: {
     ...Typography.caption,
     color: Colors.warning,
+    fontWeight: '600',
     flex: 1,
   },
   readyCard: {
     backgroundColor: Colors.cardBackground,
     borderRadius: BorderRadius.lg,
-    padding: Spacing.xl,
+    padding: Spacing.base,
     borderWidth: 1,
     borderColor: Colors.borders,
-    ...Shadows.card,
     marginBottom: Spacing.lg,
+    ...Shadows.subtle,
   },
   readyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.base,
   },
   ctaContainer: {
-    marginTop: Spacing.sm,
+    marginTop: Spacing.xs,
   },
   ctaButton: {
     height: 52,
-    ...Shadows.elevated,
+    borderRadius: BorderRadius.md,
   },
   sectionHeader: {
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  sectionTitle: {
+    ...Typography.caption,
+    fontWeight: '700',
+    color: Colors.secondaryText,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   shortcutsGrid: {
     flexDirection: 'row',
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
   shortcutCard: {
     flex: 1,
     backgroundColor: Colors.cardBackground,
-    borderRadius: BorderRadius.lg,
+    borderRadius: BorderRadius.md,
     padding: Spacing.md,
     borderWidth: 1,
     borderColor: Colors.borders,
     ...Shadows.subtle,
   },
   shortcutIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
   shortcutTitle: {
-    ...Typography.h3,
-    marginBottom: 2,
+    ...Typography.bodySmall,
+    fontWeight: '700',
+    color: Colors.darkNavy,
   },
 });

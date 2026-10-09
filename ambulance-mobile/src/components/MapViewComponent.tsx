@@ -28,8 +28,16 @@ export const MapViewComponent: React.FC<MapViewComponentProps> = ({
   height = 240,
   showNavigationButton = true,
 }) => {
-  const centerLat = hospitalLocation?.latitude || incidentLocation?.latitude || 13.0827;
-  const centerLng = hospitalLocation?.longitude || incidentLocation?.longitude || 80.2707;
+  const centerLat =
+    hospitalLocation?.latitude ||
+    incidentLocation?.latitude ||
+    ambulanceLocation?.latitude ||
+    13.0827;
+  const centerLng =
+    hospitalLocation?.longitude ||
+    incidentLocation?.longitude ||
+    ambulanceLocation?.longitude ||
+    80.2707;
 
   // Generate Leaflet HTML
   const markers: MapCoordinate[] = [];

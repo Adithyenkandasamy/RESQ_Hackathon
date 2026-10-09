@@ -3,6 +3,7 @@ import {
   Emergency,
   EmergencyCreatePayload,
   EmergencyStatus,
+  EmergencySeverity,
   PatientInfo,
   EmergencyHistoryItem,
 } from '../types/emergency';

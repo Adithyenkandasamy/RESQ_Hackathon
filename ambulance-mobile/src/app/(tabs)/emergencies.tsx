@@ -6,10 +6,13 @@ import {
   StyleSheet,
   TouchableOpacity,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useAuth } from '../../context/AuthContext';
+import { useEmergency } from '../../context/EmergencyContext';
 import { EmergenciesApi } from '../../api/emergencies';
-import { Emergency, EmergencyStatus } from '../../types/emergency';
+import { Emergency } from '../../types/emergency';
 import { StatusBadge } from '../../components/StatusBadge';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { LoadingState } from '../../components/LoadingState';
@@ -18,10 +21,20 @@ import { ErrorState } from '../../components/ErrorState';
 import { Colors } from '../../constants/colors';
 import { Spacing, BorderRadius, Shadows } from '../../constants/spacing';
 import { Typography } from '../../constants/typography';
-import { AlertTriangle, Clock, MapPin } from 'lucide-react-native';
+import {
+  AlertTriangle,
+  Clock,
+  MapPin,
+  Flame,
+  ArrowRight,
+  ShieldCheck,
+  Building2,
+} from 'lucide-react-native';
 
 export default function EmergenciesScreen() {
   const router = useRouter();
+  const { ambulance } = useAuth();
+  const { activeEmergency } = useEmergency();
   const [emergencies, setEmergencies] = useState<Emergency[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,22 +62,55 @@ export default function EmergenciesScreen() {
     fetchList();
   };
 
+  const handleCardPress = (item: Emergency) => {
+    if (activeEmergency?.id === item.id || (ambulance && item.assigned_ambulance_id === ambulance.id)) {
+      router.push('/emergency/active');
+    } else {
+      Alert.alert(
+        `Incident #${item.id.slice(0, 8)}`,
+        `Severity: ${item.severity_level}\nStatus: ${item.status}\nLocation: ${item.location_description || 'Coordinates verified'}\n${
+          item.patient_info?.chief_complaint ? `Complaint: ${item.patient_info.chief_complaint}\n` : ''
+        }\n${item.assigned_ambulance_id ? 'Assigned to responding unit.' : 'Unassigned incident in queue.'}`
+      );
+    }
+  };
+
   const renderItem = ({ item }: { item: Emergency }) => {
     const isCritical = item.severity_level === 'CRITICAL';
     const isCompleted = item.status === 'HANDOVER_COMPLETED';
+    const isMyUnit = ambulance && item.assigned_ambulance_id === ambulance.id;
+    const isCurrentActive = activeEmergency?.id === item.id;
 
     return (
       <TouchableOpacity
-        style={styles.card}
-        onPress={() => router.push('/emergency/active')}
+        style={[
+          styles.card,
+          (isMyUnit || isCurrentActive) && styles.cardActiveAssignment,
+        ]}
+        onPress={() => handleCardPress(item)}
         activeOpacity={0.8}
       >
+        {(isMyUnit || isCurrentActive) && (
+          <View style={styles.activeRibbon}>
+            <ShieldCheck size={14} color="#FFFFFF" />
+            <Text style={styles.activeRibbonText}>Assigned to Your Unit</Text>
+          </View>
+        )}
+
         <View style={styles.cardTop}>
-          <Text style={Typography.mono}>#{item.id.slice(0, 8)}</Text>
+          <View>
+            <Text style={Typography.mono}>#{item.id.slice(0, 8)}</Text>
+            <Text style={styles.timeText}>
+              {new Date(item.created_at).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </Text>
+          </View>
           <View style={styles.badgeRow}>
             <StatusBadge
               label={item.severity_level}
-              type={isCritical ? 'error' : 'warning'}
+              type={isCritical ? 'error' : item.severity_level === 'URGENT' ? 'warning' : 'neutral'}
             />
             <StatusBadge
               label={item.status}
@@ -82,17 +128,29 @@ export default function EmergenciesScreen() {
           </View>
         )}
 
-        <View style={styles.metaRow}>
-          <Clock size={15} color={Colors.secondaryText} />
-          <Text style={styles.metaText}>
-            {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
-          {item.patient_info?.chief_complaint && (
-            <Text style={[styles.metaText, { marginLeft: Spacing.sm }]} numberOfLines={1}>
-              • {item.patient_info.chief_complaint}
+        {item.latitude && item.longitude && (
+          <View style={styles.metaRow}>
+            <Text style={styles.coordText}>
+              GPS: {item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}
             </Text>
-          )}
-        </View>
+          </View>
+        )}
+
+        {item.patient_info?.chief_complaint && (
+          <View style={styles.complaintBox}>
+            <Flame size={14} color={Colors.error} />
+            <Text style={styles.complaintText} numberOfLines={1}>
+              {item.patient_info.chief_complaint}
+            </Text>
+          </View>
+        )}
+
+        {(isMyUnit || isCurrentActive) && (
+          <View style={styles.openMissionRow}>
+            <Text style={styles.openMissionText}>Open Active Mission Details</Text>
+            <ArrowRight size={14} color={Colors.primaryBlue} />
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -131,6 +189,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: Spacing.base,
+    paddingBottom: Spacing.xxl,
   },
   card: {
     backgroundColor: Colors.cardBackground,
@@ -141,11 +200,38 @@ const styles = StyleSheet.create({
     borderColor: Colors.borders,
     ...Shadows.subtle,
   },
+  cardActiveAssignment: {
+    borderColor: Colors.primaryBlue,
+    borderWidth: 1.5,
+    backgroundColor: '#F0F9FF',
+  },
+  activeRibbon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.primaryBlue,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.sm,
+    marginBottom: Spacing.xs,
+  },
+  activeRibbonText: {
+    ...Typography.caption,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 10,
+  },
   cardTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
+    alignItems: 'flex-start',
+    marginBottom: Spacing.xs,
+  },
+  timeText: {
+    ...Typography.caption,
+    color: Colors.secondaryText,
+    marginTop: 2,
   },
   badgeRow: {
     flexDirection: 'row',
@@ -154,11 +240,46 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 6,
   },
   metaText: {
     ...Typography.bodySmall,
     marginLeft: 6,
     flex: 1,
+  },
+  coordText: {
+    ...Typography.caption,
+    color: Colors.secondaryText,
+    fontFamily: Typography.mono.fontFamily,
+  },
+  complaintBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: Spacing.xs,
+    padding: 6,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: '#FEF2F2',
+  },
+  complaintText: {
+    ...Typography.caption,
+    color: Colors.error,
+    fontWeight: '600',
+    flex: 1,
+  },
+  openMissionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borders,
+  },
+  openMissionText: {
+    ...Typography.caption,
+    color: Colors.primaryBlue,
+    fontWeight: '700',
   },
 });

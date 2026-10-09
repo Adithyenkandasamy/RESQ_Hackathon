@@ -17,7 +17,7 @@ import { ErrorState } from '../../components/ErrorState';
 import { Colors } from '../../constants/colors';
 import { Spacing, BorderRadius, Shadows } from '../../constants/spacing';
 import { Typography } from '../../constants/typography';
-import { Clock, CheckCircle2, Building2 } from 'lucide-react-native';
+import { Clock, CheckCircle2, Building2, MapPin, HeartPulse } from 'lucide-react-native';
 
 export default function HistoryScreen() {
   const [historyItems, setHistoryItems] = useState<Emergency[]>([]);
@@ -29,8 +29,12 @@ export default function HistoryScreen() {
     try {
       setError(null);
       const res = await EmergenciesApi.getEmergencies(1, 50);
-      // Filter emergencies that have finished or transitioned
-      setHistoryItems(res.items);
+      // Prioritize completed incidents and resolved handovers
+      const completedOnly = res.items.filter(
+        (e) => e.status === 'HANDOVER_COMPLETED' || e.status === 'CANCELLED' || e.status === 'AT_HOSPITAL'
+      );
+      // If none are specifically completed yet, display all recorded missions so the log isn't falsely empty
+      setHistoryItems(completedOnly.length > 0 ? completedOnly : res.items);
     } catch (e: any) {
       setError(e.message || 'Failed to load emergency history.');
     } finally {
@@ -72,18 +76,36 @@ export default function HistoryScreen() {
         <View style={styles.divider} />
 
         <View style={styles.detailsRow}>
-          <Text style={Typography.bodySmall}>Priority:</Text>
+          <Text style={Typography.bodySmall}>Priority Level:</Text>
           <StatusBadge
             label={item.severity_level}
             type={item.severity_level === 'CRITICAL' ? 'error' : 'warning'}
           />
         </View>
 
+        {item.location_description && (
+          <View style={styles.metaRow}>
+            <MapPin size={14} color={Colors.secondaryText} />
+            <Text style={styles.metaText} numberOfLines={1}>
+              {item.location_description}
+            </Text>
+          </View>
+        )}
+
+        {item.patient_info?.chief_complaint && (
+          <View style={styles.metaRow}>
+            <HeartPulse size={14} color={Colors.secondaryText} />
+            <Text style={styles.metaText} numberOfLines={1}>
+              {item.patient_info.chief_complaint}
+            </Text>
+          </View>
+        )}
+
         {item.confirmed_hospital_id && (
           <View style={styles.detailsRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Building2 size={15} color={Colors.medicalGreen} />
-              <Text style={[Typography.bodySmall, { marginLeft: 4 }]}>Receiving Center:</Text>
+              <Text style={[Typography.bodySmall, { marginLeft: 4 }]}>Receiving Trauma Center:</Text>
             </View>
             <Text style={Typography.mono}>#{item.confirmed_hospital_id.slice(0, 8)}</Text>
           </View>
@@ -92,7 +114,7 @@ export default function HistoryScreen() {
         {item.handover_summary && (
           <View style={styles.handoverBox}>
             <Text style={styles.handoverLabel}>Clinical Handover Summary:</Text>
-            <Text style={styles.handoverText} numberOfLines={2}>
+            <Text style={styles.handoverText} numberOfLines={3}>
               {item.handover_summary}
             </Text>
           </View>
@@ -135,6 +157,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: Spacing.base,
+    paddingBottom: Spacing.xxl,
   },
   card: {
     backgroundColor: Colors.cardBackground,
@@ -166,13 +189,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: Spacing.xs,
   },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  metaText: {
+    ...Typography.caption,
+    color: Colors.secondaryText,
+    flex: 1,
+  },
   handoverBox: {
-    backgroundColor: Colors.lightGreen,
+    backgroundColor: '#F8FAFC',
     borderRadius: BorderRadius.sm,
     padding: Spacing.sm,
     marginTop: Spacing.xs,
-    borderWidth: 1,
-    borderColor: 'rgba(22, 163, 74, 0.2)',
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.medicalGreen,
   },
   handoverLabel: {
     ...Typography.caption,
@@ -183,5 +217,6 @@ const styles = StyleSheet.create({
   handoverText: {
     ...Typography.bodySmall,
     color: Colors.primaryText,
+    fontSize: 12,
   },
 });
