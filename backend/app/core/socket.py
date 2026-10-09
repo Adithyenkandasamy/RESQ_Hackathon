@@ -139,11 +139,10 @@ async def verify_emergency_access_for_socket(
                 return False
 
             if user_role == UserRole.AMBULANCE_CREW.value:
-                if (user_uuid and emergency.created_by_id == user_uuid) or (
-                    amb_uuid and emergency.assigned_ambulance_id == amb_uuid
-                ):
-                    return True
-                return False
+                return bool(
+                    (user_uuid and emergency.created_by_id == user_uuid)
+                    or (amb_uuid and emergency.assigned_ambulance_id == amb_uuid)
+                )
 
             if user_role == UserRole.HOSPITAL_STAFF.value and hosp_uuid:
                 if emergency.confirmed_hospital_id == hosp_uuid:

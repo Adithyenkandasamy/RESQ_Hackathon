@@ -1,13 +1,13 @@
 # Emergency Response Coordination System — Backend
 
-> **Phase 3: Hospital Matching, Socket.IO, and AI Integration**
+> **Phase 4: Integration, Security, Reliability, Testing, and Deployment**
 
 Production-minded FastAPI backend for the Emergency Response Coordination
-System (ERCS). Building upon the Phase 1 foundation and Phase 2 data/auth models,
-Phase 3 implements rules-based hospital matching, persistent admission requests,
-concurrency-safe destination hospital assignment, ASGI-mounted Socket.IO real-time
-notifications, ElevenLabs voice transcription, Groq clinical observation extraction,
-handover summarization, and clinically constrained first-aid guidance.
+System (ERCS). Building upon the Phase 1 foundation, Phase 2 data/auth models,
+and Phase 3 real-time and AI integrations, Phase 4 hardens cross-tenant security,
+guarantees single-hospital concurrency, protects confidential patient records,
+validates complete emergency-to-handover lifecycles, and provides containerized
+production deployment workflows.
 
 ---
 
@@ -220,109 +220,123 @@ uv run python scripts/create_admin.py --email admin@ercs.org --password "YourStr
 ### Administration
 - `GET   /api/v1/admin/dashboard` — Aggregated operational metrics summary (`ADMIN` only). No sensitive patient data is exposed.
 
----
-
-## Emergency Lifecycle & State Transitions
-
-The system enforces an explicit state transition machine:
-
-```
-[CREATED] ──► [ASSESSMENT_IN_PROGRESS] ──► [SEARCHING_HOSPITAL]
-   │                       │                       │
-   ▼                       ▼                       ▼
-[CANCELLED]             [CANCELLED]             [CANCELLED]
-   ▲                       ▲                       ▲
-   │                       │                       │
-   │               [ACCEPTANCE_PENDING]            │
-   │                       │                       │
-   │                       ▼                       │
-   │              [HOSPITAL_CONFIRMED]             │
-   │                       │                       │
-   │                       ▼                       │
-   │                 [TRANSPORTING]                │
-   │                       │                       │
-   │                       ▼                       │
-   │                   [ARRIVED]                   │
-   │                       │                       │
-   │                       ▼                       │
-   │             [HANDOVER_COMPLETED]              │
-   │                                               │
-   └── [ESCALATION_REQUIRED] ◄─────────────────────┘
-```
-
-- Invalid transitions return HTTP `400 Bad Request` with details on allowed next states.
-- Every state transition automatically writes an immutable record to `emergency_history`.
+### Phase 3 & 4 Dispatch, Real-Time, and AI
+- `POST  /api/v1/emergencies/{id}/match-hospitals` — Evaluate matching criteria and dispatch hospital admission requests.
+- `GET   /api/v1/emergencies/{id}/assignment` — Retrieve confirmed destination hospital.
+- `GET   /api/v1/emergencies/{id}/destination` — Alias for confirmed destination hospital.
+- `GET   /api/v1/emergencies/{id}/requests` — Retrieve all requests dispatched for this emergency.
+- `GET   /api/v1/hospital-requests` — List admission requests for caller's hospital.
+- `GET   /api/v1/hospital-requests/{id}` — Retrieve hospital request details.
+- `POST  /api/v1/hospital-requests/{id}/accept` — Concurrency-safe acceptance (`409 Conflict` on competing losers).
+- `POST  /api/v1/hospital-requests/{id}/decline` — Decline admission request (triggers escalation when all decline).
+- `POST  /api/v1/emergencies/{id}/transcription` — Transcribe incident audio via ElevenLabs.
+- `POST  /api/v1/emergencies/{id}/ai/extract` — Extract structured clinical observations via Groq (LLaMA-3).
+- `POST  /api/v1/emergencies/{id}/ai/verify-extractions` — Attending crew verifies and promotes extracted observations to verified patient record.
+- `POST  /api/v1/emergencies/{id}/ai/handover-summary` — Generate clinical handover summary draft via Groq.
+- `POST  /api/v1/emergencies/{id}/handover/confirm` — Attending crew reviews, confirms, and approves handover summary.
+- `POST  /api/v1/emergencies/{id}/ai/first-aid` — Constrained first-aid guidance from approved clinical protocol catalog.
 
 ---
 
-## OpenAPI Export
+## Socket.IO Event Contract & Authorization
 
-To export the OpenAPI schema from the actual application:
+All Socket.IO connections run on the unified ASGI application at path `/socket.io`.
 
-```bash
-uv run python scripts/export_openapi.py --out openapi.json
-```
-
-The exported schema is generated directly from the live FastAPI routes and metadata.
-
----
-
-## Automated Testing & Quality Checks
-
-Run the automated test suite (runs 100% against an isolated in-memory test database):
-
-```bash
-uv run pytest
-```
-
-Run code formatting and lint checks:
-
-```bash
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy app
-```
-
----
-
-## Database Migrations
-
-Apply Alembic migrations to your database:
-
-```bash
-uv run alembic upgrade head
-```
-
-Generate SQL script for review without touching the live database:
-
-```bash
-uv run alembic upgrade head --sql
-```
-
----
-
-## Error Response Format
-
-All error responses use the standard envelope:
-
+### Handshake Authentication
+Supply JWT bearer token in connection auth payload:
 ```json
 {
-  "error": {
-    "code": "BAD_REQUEST",
-    "message": "Invalid transition from 'CREATED' to 'HANDOVER_COMPLETED'. Allowed target states: ['ASSESSMENT_IN_PROGRESS', 'CANCELLED'].",
-    "request_id": "550e8400-e29b-41d4-a716-446655440000"
-  }
+  "token": "<JWT_ACCESS_TOKEN>"
+}
+```
+Or via HTTP header `Authorization: Bearer <token>`.
+
+### Room Authorization
+- `hospital:{hospital_id}`: Hospital staff assigned to that hospital ID.
+- `ambulance:{ambulance_id}`: Crew members assigned to that ambulance ID.
+- `emergency:{emergency_id}`: Only assigned ambulance crew, confirmed hospital staff, or candidate hospital staff with an active admission request. Unrelated clients are strictly rejected.
+- `admin`: Administrators only.
+
+### Event Envelope
+```json
+{
+  "event_id": "550e8400-e29b-41d4-a716-446655440000",
+  "event_type": "hospital.assigned",
+  "occurred_at": "2026-10-10T00:00:00Z",
+  "resource_id": "emergency_uuid",
+  "data": { ... }
 }
 ```
 
 ---
 
-## Deferred to Later Phases
+## Production Docker Deployment
 
-The following are intentionally **not** implemented in Phase 2:
-- Socket.IO real-time event streaming
-- Groq AI processing integration
-- ElevenLabs voice transcription
-- Automated multi-criteria hospital matching algorithm
-- Redis distributed cache / session store
-- Kafka / Celery message queues
+### Build Production Image
+```bash
+docker build -t er-cs-backend:prod .
+```
+
+PowerShell:
+```powershell
+docker build -t er-cs-backend:prod .
+```
+
+### Run Production Container
+```bash
+docker run -d \
+  --name ercs-backend \
+  -p 8000:8000 \
+  --env-file .env \
+  --restart unless-stopped \
+  er-cs-backend:prod
+```
+
+PowerShell:
+```powershell
+docker run -d `
+  --name ercs-backend `
+  -p 8000:8000 `
+  --env-file .env `
+  --restart unless-stopped `
+  er-cs-backend:prod
+```
+
+---
+
+## Deployment & Rollback Procedures
+
+### Deployment Checklist
+1. Verify Aiven PostgreSQL connectivity and credentials.
+2. Run automated test suite: `uv run pytest`.
+3. Verify linting and static typing: `uv run ruff check .` and `uv run mypy app`.
+4. Apply database migrations: `uv run alembic upgrade head`.
+5. Verify health probes: `curl http://localhost:8000/health/live` and `curl http://localhost:8000/health/ready`.
+6. Export updated OpenAPI contract: `uv run python scripts/export_openapi.py --out openapi.json`.
+
+### Rollback Procedure
+If an issue occurs in production:
+1. **Application Rollback**:
+   Deploy the previous Docker image tag or git revision:
+   ```bash
+   docker stop ercs-backend && docker rm ercs-backend
+   docker run -d --name ercs-backend -p 8000:8000 --env-file .env er-cs-backend:<PREVIOUS_TAG>
+   ```
+2. **Database Migration Downgrade**:
+   To revert the most recent migration safely:
+   ```bash
+   uv run alembic downgrade -1
+   ```
+   Or target a specific revision:
+   ```bash
+   uv run alembic downgrade adbc4e6f26e3
+   ```
+
+---
+
+## Known Limitations & Architecture Notes
+
+1. **In-Memory Socket.IO**: The application uses an in-memory Socket.IO server. For horizontal multi-instance scaling, a pub/sub manager (e.g. Redis) is required. On a single container instance, uvicorn runs with `--workers 1` to ensure event coherence across all connected clients.
+2. **Proximity Calculation**: Hospital matching calculates straight-line spherical distance via the Haversine formula. Actual road travel times vary based on traffic conditions and can be integrated with external routing engines (OSRM) in subsequent releases.
+3. **Lazy Expiration**: Hospital request response deadlines are enforced on accept and retrieve operations. A background scheduled task worker can be added for automated retry waves without manual crew polling.
+

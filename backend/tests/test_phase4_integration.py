@@ -7,8 +7,6 @@ from unittest.mock import AsyncMock, patch
 import httpx
 
 from app.core.socket import join_room, sio
-from app.models.ambulance import Ambulance
-from app.models.enums import EmergencyStatus, HospitalRequestStatus
 from app.models.hospital import Hospital
 from app.models.user import User
 
@@ -161,7 +159,9 @@ class TestPhase4EndToEndAndSecurityWorkflows:
             model_used="llama-3.3-70b-versatile",
             review_status="PENDING_CREW_REVIEW",
         )
-        with patch("app.routers.emergencies.generate_handover", new_callable=AsyncMock) as mock_gen:
+        with patch(
+            "app.routers.emergencies.generate_handover", new_callable=AsyncMock
+        ) as mock_gen:
             mock_gen.return_value = mock_draft
             draft_resp = await client.post(
                 f"/api/v1/emergencies/{emergency_id}/ai/handover-summary",

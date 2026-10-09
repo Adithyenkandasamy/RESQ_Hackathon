@@ -79,7 +79,9 @@ class ExtractionVerificationRequest(BaseModel):
         description="Patient details and clinical observations verified by the attending crew",
     )
     crew_notes: str | None = Field(
-        None, max_length=1000, description="Optional clinical notes or corrections from attending crew"
+        None,
+        max_length=1000,
+        description="Optional clinical notes or corrections from attending crew",
     )
 
 
@@ -90,6 +92,7 @@ class HandoverConfirmationRequest(BaseModel):
 
     approved: bool = Field(True, description="Whether the clinical handover draft is approved")
     crew_notes: str | None = Field(
-        None, max_length=2000, description="Attending crew annotations or corrections to handover summary"
+        None,
+        max_length=2000,
+        description="Attending crew annotations or corrections to handover summary",
     )
-

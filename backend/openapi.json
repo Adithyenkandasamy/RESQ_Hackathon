@@ -556,6 +556,33 @@
         "title": "ExtractionRequest",
         "type": "object"
       },
+      "ExtractionVerificationRequest": {
+        "additionalProperties": false,
+        "description": "Payload when crew reviews and approves extracted clinical observations.",
+        "properties": {
+          "crew_notes": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional clinical notes or corrections from attending crew",
+            "title": "Crew Notes"
+          },
+          "verified_patient_info": {
+            "additionalProperties": true,
+            "description": "Patient details and clinical observations verified by the attending crew",
+            "title": "Verified Patient Info",
+            "type": "object"
+          }
+        },
+        "title": "ExtractionVerificationRequest",
+        "type": "object"
+      },
       "FirstAidGuidanceResponse": {
         "description": "Constrained first-aid supportive guidance.",
         "properties": {
@@ -638,6 +665,33 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HandoverConfirmationRequest": {
+        "additionalProperties": false,
+        "description": "Payload when attending crew reviews, confirms, or annotates clinical handover draft.",
+        "properties": {
+          "approved": {
+            "default": true,
+            "description": "Whether the clinical handover draft is approved",
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "crew_notes": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Attending crew annotations or corrections to handover summary",
+            "title": "Crew Notes"
+          }
+        },
+        "title": "HandoverConfirmationRequest",
         "type": "object"
       },
       "HandoverSummaryResponse": {
@@ -2038,6 +2092,65 @@
         ]
       }
     },
+    "/api/v1/emergencies/{emergency_id}/ai/verify-extractions": {
+      "post": {
+        "description": "Promote AI-extracted observations to verified patient record after crew review.",
+        "operationId": "verify_emergency_extractions_api_v1_emergencies__emergency_id__ai_verify_extractions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "emergency_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Emergency Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtractionVerificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmergencyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Review and verify AI-extracted clinical observations by attending crew",
+        "tags": [
+          "Emergencies"
+        ]
+      }
+    },
     "/api/v1/emergencies/{emergency_id}/assignment": {
       "get": {
         "description": "Retrieve the authoritative confirmed destination hospital.",
@@ -2082,6 +2195,114 @@
           }
         ],
         "summary": "Retrieve confirmed hospital assignment for an emergency",
+        "tags": [
+          "Emergencies"
+        ]
+      }
+    },
+    "/api/v1/emergencies/{emergency_id}/destination": {
+      "get": {
+        "description": "Retrieve the authoritative confirmed destination hospital.",
+        "operationId": "get_emergency_assignment_api_v1_emergencies__emergency_id__destination_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "emergency_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Emergency Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmedAssignmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Retrieve confirmed hospital destination for an emergency",
+        "tags": [
+          "Emergencies"
+        ]
+      }
+    },
+    "/api/v1/emergencies/{emergency_id}/handover/confirm": {
+      "post": {
+        "description": "Attending crew reviews, edits, and approves clinical handover summary for receiving hospital.",
+        "operationId": "confirm_handover_summary_api_v1_emergencies__emergency_id__handover_confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "emergency_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Emergency Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HandoverConfirmationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoverSummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Confirm and approve clinical handover summary by attending crew",
         "tags": [
           "Emergencies"
         ]

@@ -67,9 +67,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/emergencies", tags=["Emergencies"])
 
 
-async def _check_emergency_access(
-    emergency: Emergency, user: User, session: AsyncSession
-) -> None:
+async def _check_emergency_access(emergency: Emergency, user: User, session: AsyncSession) -> None:
     """Verify that the user has permission to view this emergency incident."""
     if user.role == UserRole.ADMIN:
         return
@@ -1002,9 +1000,7 @@ async def confirm_handover_summary(
 
     now = datetime.now(timezone.utc)
     summary_data = dict(emergency.handover_summary)
-    summary_data["review_status"] = (
-        "CONFIRMED_BY_CREW" if payload.approved else "REJECTED_BY_CREW"
-    )
+    summary_data["review_status"] = "CONFIRMED_BY_CREW" if payload.approved else "REJECTED_BY_CREW"
     summary_data["confirmed_at"] = now.isoformat()
     summary_data["confirmed_by_id"] = str(current_user.id)
     if payload.crew_notes:
@@ -1046,4 +1042,3 @@ async def confirm_handover_summary(
         )
 
     return HandoverSummaryResponse.model_validate(summary_data)
-

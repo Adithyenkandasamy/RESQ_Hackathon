@@ -40,5 +40,5 @@ USER appuser
 
 EXPOSE 8000
 
-# Production startup — no --reload, no debug.
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# Production startup — single worker maintains in-memory Socket.IO state coherence without external message brokers.
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
