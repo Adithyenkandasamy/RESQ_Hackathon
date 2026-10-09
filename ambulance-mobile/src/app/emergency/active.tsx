@@ -8,10 +8,13 @@ import {
   Linking,
   Platform,
   Alert,
+  TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useEmergency } from '../../context/EmergencyContext';
 import { LocationService } from '../../services/location';
+import { EmergenciesApi } from '../../api/emergencies';
+import { MediaService } from '../../services/media';
 import { EmergencyStatus } from '../../types/emergency';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AppButton } from '../../components/AppButton';
@@ -31,6 +34,9 @@ import {
   RefreshCw,
   ArrowRight,
   ShieldAlert,
+  Activity,
+  Send,
+  Square,
 } from 'lucide-react-native';
 
 const STATUS_STEPS: { key: EmergencyStatus; label: string }[] = [
@@ -73,6 +79,89 @@ export default function ActiveEmergencyScreen() {
     updateStatus,
   } = useEmergency();
   const [updating, setUpdating] = useState(false);
+  const [patientNote, setPatientNote] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordDuration, setRecordDuration] = useState(0);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isUpdatingNote, setIsUpdatingNote] = useState(false);
+  const [recordTimer, setRecordTimer] = useState<any>(null);
+
+  React.useEffect(() => {
+    if (activeEmergency) {
+      const existing =
+        (activeEmergency.patient_info?.condition_description as string) ||
+        activeEmergency.incident_description ||
+        '';
+      setPatientNote(existing);
+    }
+  }, [activeEmergency?.id]);
+
+  const startVoiceNote = async () => {
+    const started = await MediaService.startAudioRecording();
+    if (started) {
+      setIsRecording(true);
+      setRecordDuration(0);
+      const timer = setInterval(() => {
+        setRecordDuration((prev) => prev + 1);
+      }, 1000);
+      setRecordTimer(timer);
+    } else {
+      Alert.alert('Microphone Error', 'Could not access device microphone.');
+    }
+  };
+
+  const stopVoiceNote = async () => {
+    if (!activeEmergency) return;
+    if (recordTimer) {
+      clearInterval(recordTimer);
+      setRecordTimer(null);
+    }
+    setIsRecording(false);
+    setIsTranscribing(true);
+    try {
+      const result = await MediaService.stopAudioRecording();
+      if (result) {
+        const res = await EmergenciesApi.uploadAudio(activeEmergency.id, {
+          uri: result.uri,
+          name: 'patient_voice_note.m4a',
+          type: 'audio/m4a',
+        });
+        if (res.transcription_text) {
+          const appended = patientNote
+            ? `${patientNote}\n[Voice]: ${res.transcription_text}`
+            : res.transcription_text;
+          setPatientNote(appended);
+          await EmergenciesApi.updatePatientInfo(activeEmergency.id, {
+            ...activeEmergency.patient_info,
+            condition_description: appended,
+          });
+          await refreshActiveEmergency();
+          Alert.alert('Voice Note Transcribed', 'Transcribed and transmitted live to receiving hospital.');
+        }
+      }
+    } catch (err: any) {
+      Alert.alert('Voice Processing Error', err.message || 'Could not transcribe voice note.');
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const handleSendPatientNote = async () => {
+    if (!activeEmergency || !patientNote.trim()) return;
+    setIsUpdatingNote(true);
+    try {
+      await EmergenciesApi.updatePatientInfo(activeEmergency.id, {
+        ...activeEmergency.patient_info,
+        condition_description: patientNote.trim(),
+      });
+      await refreshActiveEmergency();
+      Alert.alert('Transmitted to Hospital', 'Patient condition notes updated and visible to hospital triage.');
+    } catch (err: any) {
+      Alert.alert('Update Failed', err.message || 'Could not send patient note to hospital.');
+    } finally {
+      setIsUpdatingNote(false);
+    }
+  };
 
   if (!activeEmergency) {
     return (
@@ -237,6 +326,75 @@ export default function ActiveEmergencyScreen() {
             </View>
           </View>
         )}
+
+        {/* Live Patient Condition & Voice/Text Note */}
+        <View style={styles.patientConditionCard}>
+          <View style={styles.conditionHeader}>
+            <View style={styles.conditionTitleRow}>
+              <Activity size={18} color={Colors.primaryBlue} />
+              <Text style={styles.conditionTitle}>Patient Condition & Field Notes</Text>
+            </View>
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>LIVE TO HOSPITAL</Text>
+            </View>
+          </View>
+          <Text style={styles.conditionHint}>
+            Describe current condition (conscious state, vitals, pain, injuries). Type or record voice note.
+          </Text>
+
+          <TextInput
+            style={styles.conditionInput}
+            multiline
+            numberOfLines={3}
+            placeholder="e.g. 52M, conscious, acute crushing chest pain radiating to left jaw, BP 140/90, SpO2 94%, given 325mg aspirin..."
+            placeholderTextColor={Colors.secondaryText}
+            value={patientNote}
+            onChangeText={setPatientNote}
+          />
+
+          <View style={styles.conditionActionsRow}>
+            {isRecording ? (
+              <TouchableOpacity
+                style={styles.recordingBtn}
+                onPress={stopVoiceNote}
+                activeOpacity={0.8}
+              >
+                <Square size={16} color="#FFFFFF" />
+                <Text style={styles.recordingBtnText}>
+                  Stop & Transcribe ({recordDuration}s)
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.voiceBtn}
+                onPress={startVoiceNote}
+                disabled={isTranscribing}
+                activeOpacity={0.8}
+              >
+                <Mic size={16} color={Colors.primaryBlue} />
+                <Text style={styles.voiceBtnText}>
+                  {isTranscribing ? 'Transcribing...' : 'Record Voice'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.sendNoteBtn,
+                (!patientNote.trim() || isUpdatingNote) && styles.sendNoteBtnDisabled,
+              ]}
+              onPress={handleSendPatientNote}
+              disabled={!patientNote.trim() || isUpdatingNote}
+              activeOpacity={0.8}
+            >
+              <Send size={15} color="#FFFFFF" />
+              <Text style={styles.sendNoteBtnText}>
+                {isUpdatingNote ? 'Sending...' : 'Send Live Update'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Paramedic Fast Action Grid */}
         <View style={styles.actionsGrid}>
@@ -413,5 +571,124 @@ const styles = StyleSheet.create({
     ...Typography.bodySmall,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  patientConditionCard: {
+    backgroundColor: Colors.cardBackground,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.base,
+    borderWidth: 1.5,
+    borderColor: 'rgba(37, 99, 235, 0.3)',
+    ...Shadows.card,
+    marginBottom: Spacing.md,
+  },
+  conditionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  conditionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  conditionTitle: {
+    ...Typography.bodySmall,
+    fontWeight: '700',
+    color: Colors.darkNavy,
+  },
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.full,
+    gap: 5,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#16A34A',
+  },
+  liveText: {
+    ...Typography.caption,
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#16A34A',
+    letterSpacing: 0.5,
+  },
+  conditionHint: {
+    ...Typography.caption,
+    color: Colors.secondaryText,
+    marginBottom: Spacing.sm,
+  },
+  conditionInput: {
+    backgroundColor: Colors.mainBackground,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.borders,
+    padding: Spacing.sm,
+    ...Typography.bodySmall,
+    color: Colors.primaryText,
+    minHeight: 70,
+    textAlignVertical: 'top',
+    marginBottom: Spacing.sm,
+  },
+  conditionActionsRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  voiceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.lightBlue,
+    borderWidth: 1,
+    borderColor: 'rgba(37, 99, 235, 0.3)',
+    gap: 6,
+  },
+  voiceBtnText: {
+    ...Typography.caption,
+    fontWeight: '700',
+    color: Colors.primaryBlue,
+  },
+  recordingBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.error,
+    gap: 6,
+  },
+  recordingBtnText: {
+    ...Typography.caption,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  sendNoteBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.primaryBlue,
+    gap: 6,
+  },
+  sendNoteBtnDisabled: {
+    opacity: 0.5,
+  },
+  sendNoteBtnText: {
+    ...Typography.caption,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

@@ -5,9 +5,30 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.enums import HospitalRequestStatus
+from app.models.enums import EmergencyStatus, HospitalRequestStatus
+
+
+class HospitalRequestEmergencySummary(BaseModel):
+    """Concise emergency and patient condition summary attached to admission requests."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    incident_type: str
+    incident_description: str | None = None
+    patient_info: dict[str, Any] = Field(default_factory=dict)
+    status: EmergencyStatus
+    incident_latitude: float | None = None
+    incident_longitude: float | None = None
+    created_at: datetime
+    transcription: dict[str, Any] | None = None
+    ai_extractions: list[dict[str, Any]] | None = None
+    handover_summary: dict[str, Any] | None = None
+    ai_processing_status: str | None = None
 
 
 class HospitalRequestResponse(BaseModel):
@@ -23,6 +44,7 @@ class HospitalRequestResponse(BaseModel):
     created_at: datetime
     response_deadline: datetime
     responded_at: datetime | None = None
+    emergency: HospitalRequestEmergencySummary | None = None
 
 
 class HospitalRequestDeclinePayload(BaseModel):

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_current_user
 from app.core.socket import (
@@ -61,7 +62,7 @@ async def list_hospital_requests(
     Hospital staff only see requests directed to their assigned hospital.
     Administrators can see all requests.
     """
-    stmt = select(HospitalRequest)
+    stmt = select(HospitalRequest).options(selectinload(HospitalRequest.emergency))
 
     if current_user.role == UserRole.HOSPITAL_STAFF:
         if current_user.hospital_id is None:
@@ -96,7 +97,11 @@ async def get_hospital_request(
     current_user: User = Depends(get_current_user),
 ) -> HospitalRequestResponse:
     """Retrieve details of a specific hospital request."""
-    stmt = select(HospitalRequest).where(HospitalRequest.id == request_id)
+    stmt = (
+        select(HospitalRequest)
+        .options(selectinload(HospitalRequest.emergency))
+        .where(HospitalRequest.id == request_id)
+    )
     result = await session.execute(stmt)
     req = result.scalar_one_or_none()
 

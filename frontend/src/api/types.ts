@@ -168,6 +168,7 @@ export interface HospitalRequestResponse {
   responded_at: string | null;
   response_reason: string | null;
   created_at: string;
+  emergency?: EmergencyResponse | null;
 }
 
 export interface HospitalRequestDeclinePayload {

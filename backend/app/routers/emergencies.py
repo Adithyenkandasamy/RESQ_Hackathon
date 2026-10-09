@@ -411,6 +411,8 @@ async def update_patient_info(
     _check_emergency_update_permission(emergency, current_user)
 
     emergency.patient_info = payload.patient_info
+    if "condition_description" in payload.patient_info and payload.patient_info["condition_description"]:
+        emergency.incident_description = str(payload.patient_info["condition_description"])
     emergency.updated_at = datetime.now(timezone.utc)
 
     history_entry = EmergencyHistory(
