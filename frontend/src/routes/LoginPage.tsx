@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -112,6 +113,22 @@ export function LoginPage() {
               {isLoading ? "Signing in…" : "Sign in"}
             </button>
           </form>
+        </div>
+
+        {/* Hospital self-registration entry point */}
+        <div className="mt-4 rounded-md border border-outline-variant bg-white px-4 py-3 text-center shadow-sm">
+          <p className="text-[13px] text-navy">
+            New hospital?{" "}
+            <Link
+              to="/register"
+              className="font-semibold text-primary hover:underline"
+            >
+              Register your facility
+            </Link>
+          </p>
+          <p className="text-[12px] text-navy-secondary mt-0.5">
+            Applications are reviewed and approved by an administrator.
+          </p>
         </div>
 
         <p className="text-center text-[12px] text-outline mt-5">

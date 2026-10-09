@@ -215,7 +215,7 @@ async def create_hospital(
     summary="Get current hospital profile",
 )
 async def get_current_hospital(
-    current_user: User = Depends(require_roles(UserRole.HOSPITAL_STAFF)),
+    current_user: User = Depends(require_roles(UserRole.HOSPITAL_STAFF, UserRole.ADMIN)),
     session: AsyncSession = Depends(get_db_session),
 ) -> HospitalResponse:
     """Retrieve profile and capacity data for the hospital assigned to the caller."""

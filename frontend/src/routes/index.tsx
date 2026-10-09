@@ -15,6 +15,7 @@ import { RoleGuard } from "../auth/RoleGuard";
 
 // Pages
 import { LoginPage } from "./LoginPage";
+import { RegisterPage } from "./RegisterPage";
 import { AmbulanceCrewRedirect } from "./AmbulanceCrewRedirect";
 import { ForbiddenPage, NotFoundPage } from "./ErrorPages";
 
@@ -44,6 +45,7 @@ export function AppRouter() {
             <Routes>
               {/* Public */}
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
               <Route path="/403" element={<ForbiddenPage />} />
 
               {/* Ambulance crew — protected but shown special screen */}
@@ -110,7 +112,7 @@ export function AppRouter() {
               <Route
                 path="/hospital"
                 element={
-                  <RoleGuard allowedRoles={["HOSPITAL_STAFF"]}>
+                  <RoleGuard allowedRoles={["HOSPITAL_STAFF", "ADMIN"]}>
                     <Navigate to="/hospital/dashboard" replace />
                   </RoleGuard>
                 }
@@ -118,7 +120,7 @@ export function AppRouter() {
               <Route
                 path="/hospital/dashboard"
                 element={
-                  <RoleGuard allowedRoles={["HOSPITAL_STAFF"]}>
+                  <RoleGuard allowedRoles={["HOSPITAL_STAFF", "ADMIN"]}>
                     <HospitalDashboard />
                   </RoleGuard>
                 }
@@ -126,7 +128,7 @@ export function AppRouter() {
               <Route
                 path="/hospital/cases"
                 element={
-                  <RoleGuard allowedRoles={["HOSPITAL_STAFF"]}>
+                  <RoleGuard allowedRoles={["HOSPITAL_STAFF", "ADMIN"]}>
                     <HospitalCaseList />
                   </RoleGuard>
                 }
@@ -134,7 +136,7 @@ export function AppRouter() {
               <Route
                 path="/hospital/cases/:id"
                 element={
-                  <RoleGuard allowedRoles={["HOSPITAL_STAFF"]}>
+                  <RoleGuard allowedRoles={["HOSPITAL_STAFF", "ADMIN"]}>
                     <HospitalCaseDetail />
                   </RoleGuard>
                 }
@@ -142,7 +144,7 @@ export function AppRouter() {
               <Route
                 path="/hospital/profile"
                 element={
-                  <RoleGuard allowedRoles={["HOSPITAL_STAFF"]}>
+                  <RoleGuard allowedRoles={["HOSPITAL_STAFF", "ADMIN"]}>
                     <HospitalProfile />
                   </RoleGuard>
                 }

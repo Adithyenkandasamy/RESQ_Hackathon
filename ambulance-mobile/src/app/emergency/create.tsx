@@ -200,7 +200,7 @@ export default function CreateEmergencyScreen() {
         location_description: narrative,
         incident_latitude: finalLat ?? undefined,
         incident_longitude: finalLng ?? undefined,
-        required_capabilities: ['trauma_center', 'icu'],
+        required_capabilities: ['icu', 'emergency'],
         patient_info: patientInfo,
       });
 
@@ -334,7 +334,7 @@ export default function CreateEmergencyScreen() {
             style={styles.narrativeInput}
             multiline
             numberOfLines={4}
-            placeholder="e.g. Male approx 35, accident near Anna Nagar junction. Severe head trauma, bleeding, unconscious, breathing fast. Urgent trauma ICU needed..."
+            placeholder="e.g. Male approx 35, accident near Anna Nagar junction. Severe bleeding, unconscious, breathing fast..."
             placeholderTextColor={Colors.secondaryText}
             value={patientCondition}
             onChangeText={setPatientCondition}
@@ -369,11 +369,11 @@ export default function CreateEmergencyScreen() {
           </View>
         </View>
 
-        {/* ── Patient / Scene Photo Attachment ── */}
+        {/* ── Patient Photo Attachment ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>PATIENT / SCENE PHOTO</Text>
+          <Text style={styles.sectionLabel}>PATIENT PHOTO</Text>
           <Text style={styles.helperText}>
-            Attach image of patient condition or trauma scene for receiving emergency doctors.
+            Attach photo of patient condition for receiving emergency doctors.
           </Text>
 
           {capturedImage ? (

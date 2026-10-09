@@ -11,6 +11,7 @@ interface FormFieldProps {
   required?: boolean;
   disabled?: boolean;
   className?: string;
+  step?: string | number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   registration?: ReturnType<UseFormRegister<any>>;
   children?: React.ReactNode; // allow custom inputs (textarea, select)
@@ -26,6 +27,7 @@ export function FormField({
   required,
   disabled,
   className,
+  step,
   registration,
   children,
   hint,
@@ -60,6 +62,7 @@ export function FormField({
           placeholder={placeholder}
           disabled={disabled}
           required={required}
+          step={step}
           aria-invalid={!!error}
           aria-describedby={
             [error ? errorId : null, hint ? hintId : null]

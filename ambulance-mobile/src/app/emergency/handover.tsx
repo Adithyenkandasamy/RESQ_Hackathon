@@ -62,7 +62,7 @@ export default function HandoverScreen() {
   const handleFinalizeHandover = async () => {
     Alert.alert(
       'Confirm Patient Handover',
-      'Are you sure you want to finalize the patient handover to hospital trauma staff? This will conclude the emergency response mission.',
+      'Are you sure you want to finalize the patient handover to hospital emergency staff? This will conclude the emergency response mission.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -110,7 +110,7 @@ export default function HandoverScreen() {
                 {confirmedHospital?.name || 'Assigned Hospital Facility'}
               </Text>
               <Text style={Typography.bodySmall}>
-                {confirmedHospital?.address || 'Trauma Emergency Department'}
+                {confirmedHospital?.address || 'Emergency Department'}
               </Text>
             </View>
             <StatusBadge label="RECEIVING FACILITY" type="success" />
@@ -134,7 +134,7 @@ export default function HandoverScreen() {
           </View>
 
           <AppInput
-            placeholder="Detailed clinical transfer summary (Patient vitals, observed trauma, medications administered, ETA status)..."
+            placeholder="Detailed clinical transfer summary (Patient vitals, observed condition, medications administered, ETA status)..."
             value={handoverSummary}
             onChangeText={setHandoverSummary}
             multiline

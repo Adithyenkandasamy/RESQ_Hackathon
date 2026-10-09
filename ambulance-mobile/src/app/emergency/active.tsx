@@ -331,7 +331,7 @@ export default function ActiveEmergencyScreen() {
             <Clock size={20} color={Colors.warning} />
             <View style={{ flex: 1, marginLeft: Spacing.sm }}>
               <Text style={[Typography.bodySmall, { color: Colors.warning, fontWeight: '700' }]}>
-                Awaiting Trauma Center Acceptance
+                Awaiting Hospital Acceptance
               </Text>
               <Text style={[Typography.caption, { color: Colors.warning, marginTop: 2 }]}>
                 Hospital matching requests sent to qualified facilities.

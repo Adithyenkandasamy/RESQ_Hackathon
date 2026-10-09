@@ -112,7 +112,7 @@ export default function AIAssessmentScreen() {
       // 3. Obtain protocol-constrained first aid
       const firstAid = await EmergenciesApi.getFirstAidGuidance(
         activeEmergency.id,
-        activeEmergency.patient_info?.chief_complaint || 'Trauma stabilization'
+        activeEmergency.patient_info?.chief_complaint || 'Emergency stabilization'
       );
       setFirstAidSteps(firstAid.steps);
 

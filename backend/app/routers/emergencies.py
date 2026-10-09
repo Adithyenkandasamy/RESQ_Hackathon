@@ -506,6 +506,15 @@ async def update_status(
     current_status = emergency.status
     target_status = payload.status
 
+    # Idempotent no-op: retrying a transition already in effect must not fail.
+    if target_status == current_status:
+        logger.info(
+            "No-op status transition for emergency %s (already %s)",
+            emergency.id,
+            current_status.value,
+        )
+        return _build_emergency_response(emergency)
+
     if not can_transition(current_status, target_status):
         allowed = ALLOWED_STATUS_TRANSITIONS.get(current_status, set())
         allowed_names = sorted(s.value for s in allowed)
@@ -1105,6 +1114,28 @@ async def confirm_handover_summary(
     summary_data["confirmed_by_id"] = str(current_user.id)
     if payload.crew_notes:
         summary_data["crew_notes"] = payload.crew_notes
+
+    # Finalize the incident lifecycle: completing patient handover concludes the mission.
+    # Without this transition the emergency remains in a non-terminal state and keeps
+    # surfacing as "active" on ambulance fleets even after delivery.
+    current_status = emergency.status
+    if current_status not in (EmergencyStatus.HANDOVER_COMPLETED, EmergencyStatus.CANCELLED):
+        if not can_transition(current_status, EmergencyStatus.HANDOVER_COMPLETED):
+            logger.info(
+                "Forcing terminal HANDOVER_COMPLETED for emergency %s from %s during confirm",
+                emergency.id,
+                current_status.value,
+            )
+        emergency.status = EmergencyStatus.HANDOVER_COMPLETED
+        history_transition = EmergencyHistory(
+            emergency_id=emergency.id,
+            actor_user_id=current_user.id,
+            event_type="STATUS_CHANGE",
+            previous_status=current_status.value,
+            new_status=EmergencyStatus.HANDOVER_COMPLETED.value,
+            details={"reason": "Patient handover confirmed by attending crew"},
+        )
+        session.add(history_transition)
 
     emergency.handover_summary = summary_data
     emergency.updated_at = now

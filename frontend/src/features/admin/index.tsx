@@ -5,20 +5,7 @@ import { BackendEndpointRequired } from "../../components/ErrorState";
 import { SkeletonCard } from "../../components/Skeleton";
 
 export { AdminDashboard } from "./Dashboard";
-
-/**
- * Admin Hospitals page placeholder — implemented in Step 4.
- */
-export function AdminHospitals() {
-  return (
-    <AppShell>
-      <div className="space-y-6">
-        <PageHeader title="Hospitals" subtitle="Registered hospital directory" />
-        <SkeletonCard />
-      </div>
-    </AppShell>
-  );
-}
+export { AdminHospitals } from "./Hospitals";
 
 /**
  * Admin Ambulances page — backend list/create/edit endpoints are missing.

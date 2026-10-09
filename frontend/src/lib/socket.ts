@@ -128,6 +128,10 @@ export function invalidateForSocketEvent(
       queryClient.invalidateQueries({ queryKey: ["emergencies"] });
       break;
   }
+
+  // Also invalidate hospital dashboard queries for instant real-time UI updates
+  queryClient.invalidateQueries({ queryKey: ["hospital-requests"] });
+  queryClient.invalidateQueries({ queryKey: ["hospital-active-emergencies"] });
 }
 
 // ── Toast notification helper (clinical privacy: NO patient PII) ──────────────

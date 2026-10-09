@@ -105,7 +105,7 @@ export default function HistoryScreen() {
           <View style={styles.detailsRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Building2 size={15} color={Colors.medicalGreen} />
-              <Text style={[Typography.bodySmall, { marginLeft: 4 }]}>Receiving Trauma Center:</Text>
+              <Text style={[Typography.bodySmall, { marginLeft: 4 }]}>Receiving Hospital:</Text>
             </View>
             <Text style={Typography.mono}>#{item.confirmed_hospital_id.slice(0, 8)}</Text>
           </View>

@@ -69,6 +69,7 @@ const LogoutIcon = () => (
 
 const ADMIN_NAV: NavItem[] = [
   { to: "/admin/dashboard", label: "Dashboard", icon: <DashboardIcon />, end: true },
+  { to: "/hospital/dashboard", label: "Hospital Feed", icon: <CasesIcon /> },
   { to: "/admin/hospitals", label: "Hospitals", icon: <HospitalIcon /> },
   { to: "/admin/ambulances", label: "Ambulances", icon: <AmbulanceIcon /> },
   { to: "/admin/users", label: "Users", icon: <UsersIcon /> },
