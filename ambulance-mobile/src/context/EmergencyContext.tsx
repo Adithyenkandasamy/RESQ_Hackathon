@@ -79,9 +79,8 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Listen for real-time Socket.IO updates
   useEffect(() => {
     const handleHospitalAssigned = async (data: any) => {
-      if (activeEmergency) {
-        await refreshActiveEmergency();
-      }
+      // Always refresh when we get this event - even if activeEmergency is stale
+      await refreshActiveEmergency();
     };
 
     const handleStatusUpdated = async (data: any) => {
@@ -98,6 +97,18 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       socketService.off('emergency.status.updated', handleStatusUpdated);
     };
   }, [activeEmergency, refreshActiveEmergency]);
+
+  // Polling fallback: refresh every 5s while an emergency is active to pick up
+  // hospital acceptance even when socket events are missed.
+  useEffect(() => {
+    if (!activeEmergency) return;
+    // If hospital is not yet confirmed, poll frequently to catch the acceptance
+    if (activeEmergency.confirmed_hospital_id) return;
+    const interval = setInterval(() => {
+      refreshActiveEmergency();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [activeEmergency?.id, activeEmergency?.confirmed_hospital_id, refreshActiveEmergency]);
 
   const createEmergency = async (payload: EmergencyCreatePayload): Promise<Emergency> => {
     setIsLoading(true);

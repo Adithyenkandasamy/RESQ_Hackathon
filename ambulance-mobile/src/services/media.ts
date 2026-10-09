@@ -1,19 +1,29 @@
+import { NativeModules } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 
 // Safely obtain Audio module without crashing if ExponentAV native module is missing in Expo Go.
 // Cache the result so we only try once.
-// IMPORTANT: We use string concatenation ('expo' + '-av') to prevent Metro from statically
-// resolving this dependency at bundle time, which would cause it to throw during module evaluation.
 let _audioModule: any = undefined; // undefined = not tried, null = unavailable
 function getAudio() {
   if (_audioModule !== undefined) return _audioModule;
+
+  // In Expo Go SDK 53+, ExponentAV is not compiled into the client.
+  // Probing NativeModules prevents requiring 'expo-av' which triggers an uncatchable
+  // native module lookup error from Expo's module loader.
+  const hasNativeExponentAV = Boolean(
+    (NativeModules && (NativeModules.ExponentAV || (NativeModules as any).ExpoAudio)) ||
+    ((globalThis as any)?.expo?.modules?.ExponentAV)
+  );
+
+  if (!hasNativeExponentAV) {
+    _audioModule = null;
+    return null;
+  }
+
   try {
-    // Defeat Metro static analysis so this is truly lazy
     const moduleName = 'expo' + '-av';
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const expoAv = require(moduleName);
-    // expo-av may load but throw when accessing Audio internals if native module is missing.
-    // Probe it now to fail fast in this safe catch block.
     if (expoAv?.Audio?.requestPermissionsAsync) {
       _audioModule = expoAv.Audio;
     } else {

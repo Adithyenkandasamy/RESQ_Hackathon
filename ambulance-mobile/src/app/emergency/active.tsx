@@ -28,26 +28,17 @@ import {
   Navigation,
   Phone,
   Mic,
-  FileCheck,
   CheckCircle2,
   Clock,
   AlertCircle,
   RefreshCw,
   ArrowRight,
-  ShieldAlert,
   Activity,
   Send,
   Square,
   ChevronUp,
   ChevronDown,
 } from 'lucide-react-native';
-
-const STATUS_STEPS: { key: EmergencyStatus; label: string }[] = [
-  { key: 'EN_ROUTE_SCENE', label: 'En Route' },
-  { key: 'ON_SCENE', label: 'On Scene' },
-  { key: 'EN_ROUTE_HOSPITAL', label: 'Transport' },
-  { key: 'AT_HOSPITAL', label: 'Arrived' },
-];
 
 function getNextAction(status: EmergencyStatus): {
   targetStatus: EmergencyStatus;
@@ -80,6 +71,7 @@ export default function ActiveEmergencyScreen() {
     confirmedHospital,
     refreshActiveEmergency,
     updateStatus,
+    clearActiveEmergency,
   } = useEmergency();
   const [updating, setUpdating] = useState(false);
   const [patientNote, setPatientNote] = useState('');
@@ -240,47 +232,6 @@ export default function ActiveEmergencyScreen() {
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Step Progress Bar */}
-        <View style={styles.stepBar}>
-          {STATUS_STEPS.map((step, idx) => {
-            const isCompleted =
-              activeEmergency.status === step.key ||
-              (step.key === 'EN_ROUTE_SCENE' && ['ON_SCENE', 'EN_ROUTE_HOSPITAL', 'AT_HOSPITAL', 'HANDOVER_COMPLETED'].includes(activeEmergency.status)) ||
-              (step.key === 'ON_SCENE' && ['EN_ROUTE_HOSPITAL', 'AT_HOSPITAL', 'HANDOVER_COMPLETED'].includes(activeEmergency.status)) ||
-              (step.key === 'EN_ROUTE_HOSPITAL' && ['AT_HOSPITAL', 'HANDOVER_COMPLETED'].includes(activeEmergency.status));
-
-            const isCurrent = activeEmergency.status === step.key;
-
-            return (
-              <View key={step.key} style={styles.stepItem}>
-                <View
-                  style={[
-                    styles.stepCircle,
-                    isCompleted && styles.stepCircleCompleted,
-                    isCurrent && styles.stepCircleCurrent,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.stepNum,
-                      (isCompleted || isCurrent) && styles.stepNumActive,
-                    ]}
-                  >
-                    {idx + 1}
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    styles.stepLabel,
-                    isCurrent && styles.stepLabelCurrent,
-                  ]}
-                >
-                  {step.label}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
 
         {/* Primary Next Status Action Button */}
         {nextAction && (
@@ -444,32 +395,45 @@ export default function ActiveEmergencyScreen() {
           )}
         </View>
 
-        {/* Paramedic Fast Action Grid */}
-        <View style={styles.actionsGrid}>
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => router.push('/emergency/ai-assessment')}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.actionIconBox, { backgroundColor: Colors.lightBlue }]}>
-              <Mic size={20} color={Colors.primaryBlue} />
-            </View>
-            <Text style={styles.actionTitle}>Voice AI Assessment</Text>
-            <Text style={Typography.caption}>ElevenLabs & Groq NLP</Text>
-          </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.actionCard}
-            onPress={() => router.push('/emergency/handover')}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.actionIconBox, { backgroundColor: Colors.lightGreen }]}>
-              <FileCheck size={20} color={Colors.medicalGreen} />
-            </View>
-            <Text style={styles.actionTitle}>Hospital Handover</Text>
-            <Text style={Typography.caption}>Transfer Clinical Notes</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Conclude / Cancel Incident Button */}
+        <TouchableOpacity
+          style={{
+            marginTop: Spacing.lg,
+            paddingVertical: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: BorderRadius.md,
+            borderWidth: 1,
+            borderColor: '#FECACA',
+            backgroundColor: '#FEF2F2',
+          }}
+          onPress={() => {
+            Alert.alert(
+              'Conclude / Cancel Mission',
+              'Do you want to finalize and conclude this emergency mission?',
+              [
+                { text: 'Keep Mission Active', style: 'cancel' },
+                {
+                  text: 'Conclude & Clear',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await updateStatus('CANCELLED' as any, 'Concluded by crew');
+                    } catch {
+                      clearActiveEmergency();
+                    }
+                    router.replace('/(tabs)/home');
+                  },
+                },
+              ]
+            );
+          }}
+        >
+          <Text style={{ color: Colors.error, fontSize: 13, fontWeight: '700' }}>
+            Conclude / Cancel Incident
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );

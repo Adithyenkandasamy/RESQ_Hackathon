@@ -860,16 +860,16 @@ async def get_emergency_requests(
 )
 @router.get(
     "/{emergency_id}/destination",
-    response_model=ConfirmedAssignmentResponse,
-    summary="Retrieve confirmed hospital destination for an emergency",
+    response_model=None,
+    summary="Retrieve confirmed hospital destination for an emergency (full details)",
     include_in_schema=True,
 )
 async def get_emergency_assignment(
     emergency_id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
-) -> ConfirmedAssignmentResponse:
-    """Retrieve the authoritative confirmed destination hospital."""
+):
+    """Retrieve the authoritative confirmed destination hospital with full details."""
     stmt = select(Emergency).where(Emergency.id == emergency_id)
     emergency = (await session.execute(stmt)).scalar_one_or_none()
 
@@ -881,10 +881,37 @@ async def get_emergency_assignment(
 
     await _check_emergency_access(emergency, current_user, session)
 
+    # For /assignment route: return lightweight ConfirmedAssignmentResponse
+    # For /destination route: return full hospital object the mobile app needs
     hospital_name: str | None = None
+    hospital_full: Hospital | None = None
     if emergency.confirmed_hospital_id:
-        h_stmt = select(Hospital.name).where(Hospital.id == emergency.confirmed_hospital_id)
-        hospital_name = (await session.execute(h_stmt)).scalar_one_or_none()
+        h_stmt = select(Hospital).where(Hospital.id == emergency.confirmed_hospital_id)
+        hospital_full = (await session.execute(h_stmt)).scalar_one_or_none()
+        if hospital_full:
+            hospital_name = hospital_full.name
+
+    # Return full hospital details so mobile can show name, address, contact, navigation
+    if hospital_full:
+        return {
+            "id": str(hospital_full.id),
+            "name": hospital_full.name,
+            "registration_identifier": hospital_full.registration_identifier,
+            "address": hospital_full.address,
+            "latitude": hospital_full.latitude,
+            "longitude": hospital_full.longitude,
+            "contact_number": hospital_full.contact_number,
+            "capabilities": hospital_full.capabilities or [],
+            "reported_availability": hospital_full.reported_availability or {},
+            "availability_updated_at": hospital_full.availability_updated_at.isoformat() if hospital_full.availability_updated_at else None,
+            "created_at": hospital_full.created_at.isoformat(),
+            "updated_at": hospital_full.updated_at.isoformat(),
+            # Extra fields for context
+            "emergency_id": str(emergency.id),
+            "confirmed_hospital_id": str(emergency.confirmed_hospital_id),
+            "confirmed_hospital_name": hospital_name,
+            "status": emergency.status.value,
+        }
 
     return ConfirmedAssignmentResponse(
         emergency_id=emergency.id,

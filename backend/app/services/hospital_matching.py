@@ -86,19 +86,22 @@ class HospitalMatchingService:
     def calculate_proximity_score(cls, distance_km: float) -> float:
         """Score geographic proximity from 0.0 to 100.0.
 
-        Proximity is a non-linear scoring function; straight-line distance
-        is a heuristic and does not guarantee travel time.
+        Proximity heavily prioritizes nearby regional emergency facilities.
         """
         if distance_km <= 5.0:
             return 100.0
-        elif distance_km <= 15.0:
-            return 85.0
-        elif distance_km <= 30.0:
-            return 65.0
+        elif distance_km <= 20.0:
+            return 95.0
         elif distance_km <= 50.0:
-            return 45.0
+            return 85.0
+        elif distance_km <= 100.0:
+            return 75.0
+        elif distance_km <= 200.0:
+            return 55.0
+        elif distance_km <= 500.0:
+            return 30.0
         else:
-            return max(0.0, 45.0 - (distance_km - 50.0))
+            return 0.0
 
     @classmethod
     def evaluate_availability(cls, reported_availability: dict[str, Any]) -> tuple[float, str]:
@@ -195,9 +198,9 @@ class HospitalMatchingService:
                 hospital.capabilities, required_caps
             )
 
-            # Composite Score: 40% capabilities, 35% availability, 25% proximity
+            # Composite Score: 50% proximity, 30% availability, 20% capabilities
             composite = round(
-                (cap_score * 0.40) + (avail_score * 0.35) + (prox_score * 0.25),
+                (prox_score * 0.50) + (avail_score * 0.30) + (cap_score * 0.20),
                 2,
             )
 

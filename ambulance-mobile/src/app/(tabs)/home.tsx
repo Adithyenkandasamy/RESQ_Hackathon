@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Platform,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,7 +37,13 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, ambulance, updateAvailability, refreshProfile } = useAuth();
-  const { activeEmergency, confirmedHospital, refreshActiveEmergency } = useEmergency();
+  const {
+    activeEmergency,
+    confirmedHospital,
+    refreshActiveEmergency,
+    updateStatus,
+    clearActiveEmergency,
+  } = useEmergency();
 
   const [refreshing, setRefreshing] = useState(false);
   const [currentGps, setCurrentGps] = useState<LocationCoordinates | null>(null);
@@ -251,6 +258,44 @@ export default function HomeScreen() {
               style={{ marginTop: Spacing.md }}
               icon={<ArrowRight size={18} color="#FFFFFF" />}
             />
+
+            <TouchableOpacity
+              style={{
+                marginTop: Spacing.sm,
+                paddingVertical: 10,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: Colors.borders,
+                backgroundColor: '#FFF1F2',
+              }}
+              onPress={() => {
+                Alert.alert(
+                  'Conclude Active Incident',
+                  'Are you sure you want to conclude and clear this active incident from this unit?',
+                  [
+                    { text: 'Keep Active', style: 'cancel' },
+                    {
+                      text: 'Conclude & Clear',
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          await updateStatus('CANCELLED' as any, 'Concluded by crew from home');
+                        } catch {
+                          clearActiveEmergency();
+                        }
+                        refreshActiveEmergency();
+                      },
+                    },
+                  ]
+                );
+              }}
+            >
+              <Text style={{ color: Colors.error, fontSize: 13, fontWeight: '700' }}>
+                Conclude / Clear Incident
+              </Text>
+            </TouchableOpacity>
           </View>
         ) : (
           /* NO ACTIVE EMERGENCY — READY STATE */
