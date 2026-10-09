@@ -169,16 +169,22 @@ class HospitalMatchingService:
         candidates: list[HospitalMatchResult] = []
 
         for hospital in all_hospitals:
-            distance = haversine_distance(
-                emergency.incident_latitude,
-                emergency.incident_longitude,
-                hospital.latitude,
-                hospital.longitude,
+            coords_available = (
+                emergency.incident_latitude is not None and emergency.incident_longitude is not None
             )
-
-            # Check radius boundary
-            if distance > search_radius_km:
-                continue
+            if coords_available:
+                distance = haversine_distance(
+                    emergency.incident_latitude,  # type: ignore[arg-type]
+                    emergency.incident_longitude,  # type: ignore[arg-type]
+                    hospital.latitude,
+                    hospital.longitude,
+                )
+                if distance > search_radius_km:
+                    continue
+                prox_score = cls.calculate_proximity_score(distance)
+            else:
+                distance = 0.0
+                prox_score = 50.0
 
             avail_score, avail_status = cls.evaluate_availability(hospital.reported_availability)
 
@@ -189,7 +195,6 @@ class HospitalMatchingService:
             cap_score, matched_caps = cls.evaluate_capabilities(
                 hospital.capabilities, required_caps
             )
-            prox_score = cls.calculate_proximity_score(distance)
 
             # Composite Score: 40% capabilities, 35% availability, 25% proximity
             composite = round(
@@ -198,7 +203,7 @@ class HospitalMatchingService:
             )
 
             explanation = (
-                f"Distance: {distance}km (score {prox_score}/100); "
+                f"Distance: {distance}km {'(GPS verified)' if coords_available else '(Incident coords unrecorded)'} (score {prox_score}/100); "
                 f"Availability: {avail_status} (score {avail_score}/100); "
                 f"Capabilities matched: {matched_caps} of {required_caps} (score {cap_score}/100)."
             )

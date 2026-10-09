@@ -21,8 +21,8 @@ export default function LoginScreen() {
   const router = useRouter();
   const { login } = useAuth();
 
-  const [email, setEmail] = useState('ambulance@ercs.org');
-  const [password, setPassword] = useState('Ambulance123!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -42,12 +42,6 @@ export default function LoginScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillSeedCredentials = () => {
-    setEmail('ambulance@ercs.org');
-    setPassword('Ambulance123!');
-    setErrorMessage(null);
   };
 
   return (
@@ -100,14 +94,6 @@ export default function LoginScreen() {
             loading={loading}
             style={styles.loginButton}
           />
-
-          <TouchableOpacity
-            style={styles.seedButton}
-            onPress={fillSeedCredentials}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.seedButtonText}>Use Verified Demo Crew Credentials</Text>
-          </TouchableOpacity>
         </View>
 
         <View style={styles.footer}>
@@ -182,16 +168,6 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     marginTop: Spacing.sm,
-  },
-  seedButton: {
-    marginTop: Spacing.md,
-    alignItems: 'center',
-    paddingVertical: Spacing.xs,
-  },
-  seedButtonText: {
-    ...Typography.caption,
-    color: Colors.primaryBlue,
-    fontWeight: '600',
   },
   footer: {
     flexDirection: 'row',

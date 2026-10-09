@@ -7,9 +7,10 @@ import math
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
+from sqlalchemy import func, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
 from app.core.auth import get_current_user
@@ -127,6 +128,72 @@ def _check_emergency_update_permission(emergency: Emergency, user: User) -> None
     )
 
 
+def _build_emergency_response(emergency: Emergency) -> EmergencyResponse:
+    """Build response with distinctly separated location types and AI artifacts."""
+    resp = EmergencyResponse.model_validate(emergency)
+    state = inspect(emergency)
+    amb = state.dict.get("assigned_ambulance")
+    if amb is not None and getattr(amb, "latitude", None) is not None:
+        resp.ambulance_latitude = amb.latitude
+        resp.ambulance_longitude = amb.longitude
+        resp.ambulance_location_updated_at = amb.location_updated_at
+
+    hosp = state.dict.get("confirmed_hospital")
+    if hosp is not None and getattr(hosp, "name", None) is not None:
+        resp.hospital_name = hosp.name
+        resp.hospital_latitude = hosp.latitude
+        resp.hospital_longitude = hosp.longitude
+    return resp
+
+
+async def _run_post_booking_ai(emergency_id: uuid.UUID) -> None:
+    """Background task to run structured observation extraction and handover summaries with Groq."""
+    try:
+        from app.database import get_db_session
+
+        async for session in get_db_session():
+            stmt = (
+                select(Emergency)
+                .options(
+                    selectinload(Emergency.assigned_ambulance),
+                    selectinload(Emergency.confirmed_hospital),
+                )
+                .where(Emergency.id == emergency_id)
+            )
+            emergency = (await session.execute(stmt)).scalar_one_or_none()
+            if not emergency:
+                return
+
+            source_text = emergency.incident_description or f"Incident: {emergency.incident_type}"
+            if emergency.transcription and emergency.transcription.get("transcript"):
+                source_text = f"{source_text}. Audio transcript: {emergency.transcription['transcript']}"
+
+            # Extract structured observations without overwriting coordinates or patient facts
+            extraction = await extract_observations(source_text)
+            if emergency.ai_extractions is None:
+                emergency.ai_extractions = []
+            emergency.ai_extractions.append(extraction.model_dump())
+
+            # Prepare initial handover summary draft
+            context = {
+                "incident_type": emergency.incident_type,
+                "incident_description": emergency.incident_description,
+                "patient_info": emergency.patient_info,
+                "status": emergency.status.value,
+                "incident_latitude": emergency.incident_latitude,
+                "incident_longitude": emergency.incident_longitude,
+            }
+            handover = await generate_handover(context)
+            emergency.handover_summary = handover.model_dump()
+            emergency.updated_at = datetime.now(timezone.utc)
+
+            await session.commit()
+            logger.info("Post-booking AI extraction completed for emergency %s", emergency_id)
+            break
+    except Exception as exc:
+        logger.warning("Post-booking AI background processing notice: %s", exc)
+
+
 @router.post(
     "",
     response_model=EmergencyResponse,
@@ -135,6 +202,7 @@ def _check_emergency_update_permission(emergency: Emergency, user: User) -> None
 )
 async def create_emergency(
     payload: EmergencyCreate,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
 ) -> EmergencyResponse:
@@ -154,7 +222,9 @@ async def create_emergency(
         else current_user.ambulance_id
     )
 
-    captured_at = payload.location_captured_at or datetime.now(timezone.utc)
+    captured_at = payload.location_captured_at or (
+        datetime.now(timezone.utc) if payload.incident_latitude is not None else None
+    )
 
     emergency = Emergency(
         created_by_id=current_user.id,
@@ -181,10 +251,23 @@ async def create_emergency(
     session.add(history_entry)
 
     await session.commit()
-    await session.refresh(emergency)
+
+    # Eager load relationships for response
+    stmt_reload = (
+        select(Emergency)
+        .options(
+            selectinload(Emergency.assigned_ambulance),
+            selectinload(Emergency.confirmed_hospital),
+        )
+        .where(Emergency.id == emergency.id)
+    )
+    reloaded = (await session.execute(stmt_reload)).scalar_one()
+
+    # Trigger post-booking AI background task asynchronously
+    background_tasks.add_task(_run_post_booking_ai, emergency.id)
 
     logger.info("Emergency incident created: %s by user %s", emergency.id, current_user.id)
-    return EmergencyResponse.model_validate(emergency)
+    return _build_emergency_response(reloaded)
 
 
 @router.get(
@@ -247,15 +330,23 @@ async def list_emergencies(
     total_result = await session.execute(count_query)
     total = total_result.scalar_one()
 
-    # Query page items
-    stmt = base_query.order_by(Emergency.created_at.desc()).offset(offset).limit(page_size)
+    # Query page items with eager loaded distinct locations
+    stmt = (
+        base_query.options(
+            selectinload(Emergency.assigned_ambulance),
+            selectinload(Emergency.confirmed_hospital),
+        )
+        .order_by(Emergency.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
     result = await session.execute(stmt)
     emergencies = list(result.scalars().all())
 
     total_pages = math.ceil(total / page_size) if total > 0 else 0
 
     return PaginatedResponse[EmergencyResponse](
-        items=[EmergencyResponse.model_validate(e) for e in emergencies],
+        items=[_build_emergency_response(e) for e in emergencies],
         total=total,
         page=page,
         page_size=page_size,
@@ -274,7 +365,14 @@ async def get_emergency(
     current_user: User = Depends(get_current_user),
 ) -> EmergencyResponse:
     """Retrieve details for a specific emergency incident."""
-    stmt = select(Emergency).where(Emergency.id == emergency_id)
+    stmt = (
+        select(Emergency)
+        .options(
+            selectinload(Emergency.assigned_ambulance),
+            selectinload(Emergency.confirmed_hospital),
+        )
+        .where(Emergency.id == emergency_id)
+    )
     result = await session.execute(stmt)
     emergency = result.scalar_one_or_none()
 
@@ -285,7 +383,7 @@ async def get_emergency(
         )
 
     await _check_emergency_access(emergency, current_user, session)
-    return EmergencyResponse.model_validate(emergency)
+    return _build_emergency_response(emergency)
 
 
 @router.patch(
@@ -327,7 +425,7 @@ async def update_patient_info(
     await session.refresh(emergency)
 
     logger.info("Patient info updated for emergency %s by user %s", emergency.id, current_user.id)
-    return EmergencyResponse.model_validate(emergency)
+    return _build_emergency_response(emergency)
 
 
 @router.patch(
@@ -376,7 +474,7 @@ async def update_location(
     await session.refresh(emergency)
 
     logger.info("Location updated for emergency %s by user %s", emergency.id, current_user.id)
-    return EmergencyResponse.model_validate(emergency)
+    return _build_emergency_response(emergency)
 
 
 @router.patch(
@@ -446,7 +544,7 @@ async def update_status(
         target_status.value,
         current_user.id,
     )
-    return EmergencyResponse.model_validate(emergency)
+    return _build_emergency_response(emergency)
 
 
 @router.get(
@@ -966,7 +1064,7 @@ async def verify_emergency_extractions(
     await session.refresh(emergency)
 
     logger.info("Crew verified AI extractions for emergency: %s", emergency.id)
-    return EmergencyResponse.model_validate(emergency)
+    return _build_emergency_response(emergency)
 
 
 @router.post(

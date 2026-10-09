@@ -65,10 +65,10 @@ class Emergency(Base):
     patient_info: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
 
     # Geolocation with capture timestamp
-    incident_latitude: Mapped[float] = mapped_column(Float, nullable=False)
-    incident_longitude: Mapped[float] = mapped_column(Float, nullable=False)
-    location_captured_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utc_now, nullable=False
+    incident_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    incident_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    location_captured_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=True
     )
 
     # Lifecycle status

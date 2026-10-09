@@ -26,11 +26,11 @@ class EmergencyCreate(BaseModel):
         default_factory=dict,
         description="Scene patient observations; unknown details permitted, no diagnosis required",
     )
-    incident_latitude: float = Field(
-        ..., ge=-90.0, le=90.0, description="Latitude between -90 and 90"
+    incident_latitude: float | None = Field(
+        None, ge=-90.0, le=90.0, description="Latitude between -90 and 90, or None if unavailable"
     )
-    incident_longitude: float = Field(
-        ..., ge=-180.0, le=180.0, description="Longitude between -180 and 180"
+    incident_longitude: float | None = Field(
+        None, ge=-180.0, le=180.0, description="Longitude between -180 and 180, or None if unavailable"
     )
     location_captured_at: datetime | None = Field(
         None, description="Timestamp when coordinates were acquired; defaults to now"
@@ -118,14 +118,29 @@ class EmergencyResponse(BaseModel):
     incident_type: str
     incident_description: str | None = None
     patient_info: dict[str, Any]
-    incident_latitude: float
-    incident_longitude: float
-    location_captured_at: datetime
+    incident_latitude: float | None = None
+    incident_longitude: float | None = None
+    location_captured_at: datetime | None = None
     status: EmergencyStatus
     latitude: float | None = None
     longitude: float | None = None
     severity_level: str | None = None
     location_description: str | None = None
+
+    # Distinct location entities (Ambulance vs Incident vs Hospital)
+    ambulance_latitude: float | None = None
+    ambulance_longitude: float | None = None
+    ambulance_location_updated_at: datetime | None = None
+    hospital_name: str | None = None
+    hospital_latitude: float | None = None
+    hospital_longitude: float | None = None
+
+    # AI processing outputs
+    transcription: dict[str, Any] | None = None
+    ai_extractions: list[dict[str, Any]] | None = None
+    handover_summary: dict[str, Any] | None = None
+    ai_processing_status: str = "PENDING"
+
     created_at: datetime
     updated_at: datetime
 
@@ -135,6 +150,10 @@ class EmergencyResponse(BaseModel):
         self.longitude = self.incident_longitude
         self.severity_level = self.incident_type
         self.location_description = self.incident_description
+        if self.ai_extractions or self.handover_summary:
+            self.ai_processing_status = "COMPLETED"
+        elif self.transcription and self.transcription.get("status") == "FAILED":
+            self.ai_processing_status = "FAILED"
         return self
 
 

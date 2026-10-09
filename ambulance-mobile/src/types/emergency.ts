@@ -41,6 +41,13 @@ export interface Emergency {
   longitude: number | null;
   incident_latitude?: number | null;
   incident_longitude?: number | null;
+  ambulance_latitude?: number | null;
+  ambulance_longitude?: number | null;
+  ambulance_location_updated_at?: string | null;
+  hospital_name?: string | null;
+  hospital_latitude?: number | null;
+  hospital_longitude?: number | null;
+  ai_processing_status?: string | null;
   location_captured_at?: string | null;
   assigned_ambulance_id: string | null;
   confirmed_hospital_id: string | null;

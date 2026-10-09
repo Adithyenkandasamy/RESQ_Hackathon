@@ -116,12 +116,22 @@ export interface EmergencyResponse {
   incident_type: string;
   incident_description: string | null;
   patient_info: Record<string, unknown>;
-  incident_latitude: number;
-  incident_longitude: number;
-  location_captured_at: string;
+  incident_latitude: number | null;
+  incident_longitude: number | null;
+  location_captured_at: string | null;
   status: EmergencyStatus;
   assigned_ambulance_id: string | null;
   confirmed_hospital_id: string | null;
+  ambulance_latitude?: number | null;
+  ambulance_longitude?: number | null;
+  ambulance_location_updated_at?: string | null;
+  hospital_name?: string | null;
+  hospital_latitude?: number | null;
+  hospital_longitude?: number | null;
+  transcription?: Record<string, unknown> | null;
+  ai_extractions?: Record<string, unknown>[] | null;
+  handover_summary?: Record<string, unknown> | null;
+  ai_processing_status?: 'IDLE' | 'PENDING' | 'COMPLETED' | 'FAILED' | null;
   created_at: string;
   updated_at: string;
 }
@@ -139,8 +149,8 @@ export interface EmergencyHistoryResponse {
 
 export interface EmergencyCreate {
   incident_type: string;
-  incident_latitude: number;
-  incident_longitude: number;
+  incident_latitude?: number | null;
+  incident_longitude?: number | null;
   incident_description?: string | null;
   patient_info?: Record<string, unknown>;
   assigned_ambulance_id?: string | null;

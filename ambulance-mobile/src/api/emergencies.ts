@@ -28,14 +28,24 @@ function normalizeEmergency(data: any): Emergency {
     longitude: lng,
     incident_latitude: lat,
     incident_longitude: lng,
+    ambulance_latitude: data.ambulance_latitude ?? null,
+    ambulance_longitude: data.ambulance_longitude ?? null,
+    ambulance_location_updated_at: data.ambulance_location_updated_at ?? null,
+    hospital_name: data.hospital_name ?? null,
+    hospital_latitude: data.hospital_latitude ?? null,
+    hospital_longitude: data.hospital_longitude ?? null,
+    ai_processing_status: data.ai_processing_status ?? 'PENDING',
     location_captured_at: data.location_captured_at || data.created_at || null,
     assigned_ambulance_id: data.assigned_ambulance_id || null,
     confirmed_hospital_id: data.confirmed_hospital_id || null,
     required_capabilities: data.required_capabilities || [],
     patient_info: data.patient_info || {},
-    transcription_text: data.transcription?.text || data.transcription_text || null,
+    transcription_text: data.transcription?.text || data.transcription?.transcript || null,
     clinical_entities: data.ai_extractions?.[0] || data.clinical_entities || null,
-    handover_summary: data.handover_summary?.summary || data.handover_summary || null,
+    handover_summary:
+      data.handover_summary?.summary ||
+      data.handover_summary?.incident_overview ||
+      (typeof data.handover_summary === 'string' ? data.handover_summary : null),
     created_at: data.created_at,
     updated_at: data.updated_at,
   };
@@ -43,19 +53,22 @@ function normalizeEmergency(data: any): Emergency {
 
 export const EmergenciesApi = {
   async createEmergency(payload: EmergencyCreatePayload): Promise<Emergency> {
-    const lat = payload.incident_latitude ?? payload.latitude ?? 0;
-    const lng = payload.incident_longitude ?? payload.longitude ?? 0;
+    const lat = payload.incident_latitude ?? payload.latitude ?? null;
+    const lng = payload.incident_longitude ?? payload.longitude ?? null;
     const desc = payload.incident_description || payload.location_description || 'Emergency Scene';
     const incidentType = payload.incident_type || payload.severity_level || 'CRITICAL';
 
     const backendPayload: Record<string, any> = {
       incident_type: incidentType,
       incident_description: desc,
-      incident_latitude: lat,
-      incident_longitude: lng,
-      location_captured_at: new Date().toISOString(),
       patient_info: payload.patient_info || {},
     };
+
+    if (lat !== null && lng !== null) {
+      backendPayload.incident_latitude = lat;
+      backendPayload.incident_longitude = lng;
+      backendPayload.location_captured_at = new Date().toISOString();
+    }
 
     if (payload.assigned_ambulance_id) {
       backendPayload.assigned_ambulance_id = payload.assigned_ambulance_id;

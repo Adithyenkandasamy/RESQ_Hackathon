@@ -54,8 +54,16 @@ export default function CreateEmergencyScreen() {
   const [severity, setSeverity] = useState<EmergencySeverity>('CRITICAL');
   const [chiefComplaint, setChiefComplaint] = useState('Cardiac Arrest / Chest Pain');
   const [patientDemographic, setPatientDemographic] = useState('Unknown');
-  const [latitude, setLatitude] = useState<number | null>(initialLoc?.latitude ?? null);
-  const [longitude, setLongitude] = useState<number | null>(initialLoc?.longitude ?? null);
+
+  // Ambulance Device Location (Physical Vehicle)
+  const [ambulanceLat, setAmbulanceLat] = useState<number | null>(initialLoc?.latitude ?? null);
+  const [ambulanceLng, setAmbulanceLng] = useState<number | null>(initialLoc?.longitude ?? null);
+
+  // Incident Scene Location (Where Emergency Occurred)
+  const [incidentAtAmbulanceLocation, setIncidentAtAmbulanceLocation] = useState(true);
+  const [sceneAddress, setSceneAddress] = useState('');
+  const [sceneLat, setSceneLat] = useState<number | null>(initialLoc?.latitude ?? null);
+  const [sceneLng, setSceneLng] = useState<number | null>(initialLoc?.longitude ?? null);
   const [locationLabel, setLocationLabel] = useState(
     initialLoc
       ? `${initialLoc.latitude.toFixed(4)}, ${initialLoc.longitude.toFixed(4)}`
@@ -72,11 +80,15 @@ export default function CreateEmergencyScreen() {
     try {
       const loc = await LocationService.getCurrentLocation();
       if (loc && LocationService.isValidCoordinate(loc.latitude, loc.longitude)) {
-        setLatitude(loc.latitude);
-        setLongitude(loc.longitude);
-        setLocationLabel(`${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`);
+        setAmbulanceLat(loc.latitude);
+        setAmbulanceLng(loc.longitude);
+        if (incidentAtAmbulanceLocation) {
+          setSceneLat(loc.latitude);
+          setSceneLng(loc.longitude);
+          setLocationLabel(`${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`);
+        }
       } else {
-        setLocationLabel('GPS signal unavailable (check permissions)');
+        setLocationLabel('GPS signal unavailable');
       }
     } catch {
       setLocationLabel('GPS signal unavailable');
@@ -85,33 +97,38 @@ export default function CreateEmergencyScreen() {
     }
   };
 
+  const handleToggleSceneLocation = (atAmbulance: boolean) => {
+    setIncidentAtAmbulanceLocation(atAmbulance);
+    if (atAmbulance) {
+      setSceneLat(ambulanceLat);
+      setSceneLng(ambulanceLng);
+    } else {
+      setSceneLat(null);
+      setSceneLng(null);
+    }
+  };
+
   const handleDispatch = async () => {
     if (loading) return;
-
-    if (latitude === null || longitude === null || !LocationService.isValidCoordinate(latitude, longitude)) {
-      Alert.alert(
-        'GPS Acquisition Required',
-        'Accurate device GPS coordinates are required before dispatching emergency services. Please enable location services and tap Refresh GPS.',
-        [
-          { text: 'Refresh GPS', onPress: fetchCurrentGPS },
-          { text: 'Cancel', style: 'cancel' }
-        ]
-      );
-      return;
-    }
-
     setLoading(true);
+
     try {
       const capabilities: string[] = [];
       if (severity === 'CRITICAL') {
         capabilities.push('trauma_center', 'icu');
       }
 
+      const finalLat = incidentAtAmbulanceLocation ? sceneLat : sceneLat;
+      const finalLng = incidentAtAmbulanceLocation ? sceneLng : sceneLng;
+      const sceneDesc = incidentAtAmbulanceLocation
+        ? (sceneAddress.trim() ? `${sceneAddress.trim()} (at unit GPS)` : `Scene @ ${locationLabel}`)
+        : (sceneAddress.trim() || 'Field Emergency Scene (coordinates pending)');
+
       await createEmergency({
         severity_level: severity,
-        location_description: `Scene @ ${locationLabel}`,
-        latitude,
-        longitude,
+        location_description: sceneDesc,
+        incident_latitude: finalLat ?? undefined,
+        incident_longitude: finalLng ?? undefined,
         required_capabilities: capabilities,
         patient_info: {
           chief_complaint: chiefComplaint.trim() || 'Acute emergency',
@@ -161,22 +178,78 @@ export default function CreateEmergencyScreen() {
         keyboardShouldPersistTaps="handled"
         bounces={false}
       >
-        {/* GPS Location Bar */}
-        <View style={styles.gpsBar}>
-          <View style={styles.gpsLeft}>
-            <MapPin size={16} color={Colors.primaryBlue} />
-            <Text style={styles.gpsText} numberOfLines={1}>
-              GPS Scene: {locationLabel}
-            </Text>
+        {/* Incident Scene Location Configuration */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>INCIDENT SCENE LOCATION</Text>
+          <View style={styles.locationToggleRow}>
+            <TouchableOpacity
+              style={[
+                styles.locToggleBtn,
+                incidentAtAmbulanceLocation && styles.locToggleBtnActive,
+              ]}
+              onPress={() => handleToggleSceneLocation(true)}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.locToggleText,
+                  incidentAtAmbulanceLocation && styles.locToggleTextActive,
+                ]}
+              >
+                At Unit Position
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.locToggleBtn,
+                !incidentAtAmbulanceLocation && styles.locToggleBtnActive,
+              ]}
+              onPress={() => handleToggleSceneLocation(false)}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.locToggleText,
+                  !incidentAtAmbulanceLocation && styles.locToggleTextActive,
+                ]}
+              >
+                Different Location / Address
+              </Text>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.gpsRefreshBtn}
-            onPress={fetchCurrentGPS}
-            disabled={gpsLoading}
-          >
-            <RefreshCw size={14} color={Colors.primaryBlue} />
-            <Text style={styles.gpsRefreshText}>{gpsLoading ? 'Locating...' : 'Refresh'}</Text>
-          </TouchableOpacity>
+
+          {incidentAtAmbulanceLocation ? (
+            <View style={styles.gpsBar}>
+              <View style={styles.gpsLeft}>
+                <MapPin size={16} color={Colors.primaryBlue} />
+                <Text style={styles.gpsText} numberOfLines={1}>
+                  Unit GPS: {locationLabel}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.gpsRefreshBtn}
+                onPress={fetchCurrentGPS}
+                disabled={gpsLoading}
+              >
+                <RefreshCw size={14} color={Colors.primaryBlue} />
+                <Text style={styles.gpsRefreshText}>{gpsLoading ? 'Locating...' : 'Refresh'}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={{ marginTop: Spacing.xs }}>
+              <AppInput
+                placeholder="Enter scene address, junction, or landmark..."
+                value={sceneAddress}
+                onChangeText={setSceneAddress}
+                style={styles.inputField}
+              />
+              <Text style={[Typography.caption, { color: Colors.secondaryText, marginTop: 4 }]}>
+                {sceneLat && sceneLng
+                  ? `Scene Coords: ${sceneLat.toFixed(4)}, ${sceneLng.toFixed(4)}`
+                  : 'Coordinates: Unrecorded (text location will be used)'}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* 1-Tap Severity Selector */}
@@ -352,6 +425,35 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: Spacing.base,
+  },
+  locationToggleRow: {
+    flexDirection: 'row',
+    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  locToggleBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.borders,
+    backgroundColor: Colors.cardBackground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  locToggleBtnActive: {
+    borderColor: Colors.primaryBlue,
+    backgroundColor: Colors.lightBlue,
+  },
+  locToggleText: {
+    ...Typography.caption,
+    color: Colors.secondaryText,
+    fontWeight: '600',
+  },
+  locToggleTextActive: {
+    color: Colors.primaryBlue,
+    fontWeight: '700',
   },
   gpsBar: {
     flexDirection: 'row',

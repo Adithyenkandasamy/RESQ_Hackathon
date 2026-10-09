@@ -14,7 +14,6 @@ import { useAuth } from '../../context/AuthContext';
 import { useEmergency } from '../../context/EmergencyContext';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AppButton } from '../../components/AppButton';
-import { MapViewComponent } from '../../components/MapViewComponent';
 import { LocationService, LocationCoordinates } from '../../services/location';
 import { Colors } from '../../constants/colors';
 import { Spacing, BorderRadius, Shadows } from '../../constants/spacing';
@@ -241,32 +240,6 @@ export default function HomeScreen() {
                   Hospital dispatch matching in progress with trauma centers...
                 </Text>
               </View>
-            )}
-
-            {/* Tactical Leaflet Map with verified real coordinates */}
-            {(activeEmergency.latitude || activeEmergency.incident_latitude) && (
-              <MapViewComponent
-                incidentLocation={{
-                  latitude: (activeEmergency.latitude || activeEmergency.incident_latitude)!,
-                  longitude: (activeEmergency.longitude || activeEmergency.incident_longitude)!,
-                  label: 'Incident Scene',
-                }}
-                ambulanceLocation={
-                  currentGps
-                    ? { latitude: currentGps.latitude, longitude: currentGps.longitude }
-                    : null
-                }
-                hospitalLocation={
-                  confirmedHospital && confirmedHospital.latitude && confirmedHospital.longitude
-                    ? {
-                        latitude: confirmedHospital.latitude,
-                        longitude: confirmedHospital.longitude,
-                        label: confirmedHospital.name,
-                      }
-                    : null
-                }
-                height={160}
-              />
             )}
 
             <AppButton

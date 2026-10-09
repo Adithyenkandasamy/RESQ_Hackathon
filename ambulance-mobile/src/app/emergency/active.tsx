@@ -15,7 +15,6 @@ import { LocationService } from '../../services/location';
 import { EmergencyStatus } from '../../types/emergency';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AppButton } from '../../components/AppButton';
-import { MapViewComponent } from '../../components/MapViewComponent';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { Colors } from '../../constants/colors';
 import { Spacing, BorderRadius, Shadows } from '../../constants/spacing';
@@ -237,35 +236,6 @@ export default function ActiveEmergencyScreen() {
               </Text>
             </View>
           </View>
-        )}
-
-        {/* Tactical Map */}
-        {activeEmergency.latitude && activeEmergency.longitude && (
-          <MapViewComponent
-            incidentLocation={{
-              latitude: activeEmergency.latitude,
-              longitude: activeEmergency.longitude,
-              label: 'Scene',
-            }}
-            hospitalLocation={
-              confirmedHospital && confirmedHospital.latitude && confirmedHospital.longitude
-                ? {
-                    latitude: confirmedHospital.latitude,
-                    longitude: confirmedHospital.longitude,
-                    label: confirmedHospital.name,
-                  }
-                : null
-            }
-            ambulanceLocation={
-              LocationService.getCachedLocation()
-                ? {
-                    latitude: LocationService.getCachedLocation()!.latitude,
-                    longitude: LocationService.getCachedLocation()!.longitude,
-                  }
-                : null
-            }
-            height={200}
-          />
         )}
 
         {/* Paramedic Fast Action Grid */}

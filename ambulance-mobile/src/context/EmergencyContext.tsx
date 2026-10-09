@@ -115,6 +115,11 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         console.warn('Hospital matching trigger notice:', err);
       });
 
+      // Trigger post-booking AI observation extraction asynchronously in background
+      EmergenciesApi.extractEntities(created.id, created.incident_description || created.location_description || '').catch((err) => {
+        console.warn('Post-booking AI extraction notice:', err);
+      });
+
       return created;
     } finally {
       setIsLoading(false);

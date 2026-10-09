@@ -36,6 +36,7 @@ class ObservationExtractionResponse(BaseModel):
     reported_symptoms: list[str] = Field(default_factory=list)
     patient_responsiveness: str | None = None
     vital_signs: dict[str, Any] = Field(default_factory=dict)
+    unverified_extracted_address: str | None = None
     unknown_or_missing_info: list[str] = Field(default_factory=list)
     factual_summary: str
     model_used: str
