@@ -44,7 +44,7 @@ export default function HomeScreen() {
 
   const toggleAvailability = async () => {
     if (!ambulance) return;
-    const nextStatus = isAvailable ? 'OFF_DUTY' : 'AVAILABLE';
+    const nextStatus = isAvailable ? 'BUSY' : 'AVAILABLE';
     await updateAvailability(nextStatus);
   };
 

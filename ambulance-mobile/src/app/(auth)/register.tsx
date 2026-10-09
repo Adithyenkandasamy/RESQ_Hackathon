@@ -15,7 +15,7 @@ import { AppButton } from '../../components/AppButton';
 import { Colors } from '../../constants/colors';
 import { Spacing, BorderRadius, Shadows } from '../../constants/spacing';
 import { Typography } from '../../constants/typography';
-import { ShieldCheck, ShieldAlert } from 'lucide-react-native';
+import { ArrowLeft, ShieldAlert, Ambulance } from 'lucide-react-native';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -57,7 +57,7 @@ export default function RegisterScreen() {
       });
       router.replace('/(tabs)/home');
     } catch (err: any) {
-      setErrorMessage(err.message || 'Registration failed.');
+      setErrorMessage(err.message || 'Registration failed. Check network or email.');
     } finally {
       setLoading(false);
     }
@@ -66,32 +66,46 @@ export default function RegisterScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={styles.keyboardContainer}
+      style={styles.container}
     >
+      {/* Fixed Clean Header */}
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <ArrowLeft size={20} color={Colors.primaryText} />
+        </TouchableOpacity>
+        <Text style={styles.topBarTitle}>Crew & Vehicle Registration</Text>
+        <View style={{ width: 36 }} />
+      </View>
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.brandContainer}>
-          <View style={styles.iconCircle}>
-            <ShieldCheck size={36} color="#FFFFFF" />
+        <View style={styles.headerInfo}>
+          <View style={styles.iconBadge}>
+            <Ambulance size={24} color={Colors.primaryBlue} />
           </View>
-          <Text style={Typography.h1}>Crew Onboarding</Text>
-          <Text style={styles.subtitle}>Register Emergency Vehicle & Paramedic Crew</Text>
+          <Text style={styles.mainTitle}>Register Unit</Text>
+          <Text style={styles.subtitle}>
+            Connect vehicle hardware and register paramedic credentials.
+          </Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Unit Registration</Text>
-
           {errorMessage && (
             <View style={styles.errorBox}>
-              <ShieldAlert size={18} color={Colors.error} />
+              <ShieldAlert size={16} color={Colors.error} />
               <Text style={styles.errorText}>{errorMessage}</Text>
             </View>
           )}
 
           <AppInput
-            label="Vehicle Call Sign / Identifier"
+            label="Ambulance Call Sign"
             placeholder="e.g. AMB-UNIT-305"
             value={ambulanceIdentifier}
             onChangeText={setAmbulanceIdentifier}
@@ -100,7 +114,7 @@ export default function RegisterScreen() {
 
           <AppInput
             label="Paramedic Email"
-            placeholder="crew.member@ercs.org"
+            placeholder="paramedic@ercs.org"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -108,8 +122,8 @@ export default function RegisterScreen() {
           />
 
           <AppInput
-            label="Unit Contact Phone (Optional)"
-            placeholder="+1-555-0305"
+            label="Unit Phone (Optional)"
+            placeholder="+91-98765-43210"
             value={contactNumber}
             onChangeText={setContactNumber}
             keyboardType="phone-pad"
@@ -132,7 +146,7 @@ export default function RegisterScreen() {
           />
 
           <AppButton
-            title="Register Unit & Sign In"
+            title="Create Unit & Connect"
             onPress={handleRegister}
             loading={loading}
             style={styles.submitButton}
@@ -140,7 +154,7 @@ export default function RegisterScreen() {
         </View>
 
         <View style={styles.footer}>
-          <Text style={Typography.bodySmall}>Already have an account?</Text>
+          <Text style={Typography.bodySmall}>Already have registered credentials?</Text>
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.loginLink}>Sign In</Text>
           </TouchableOpacity>
@@ -151,75 +165,101 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  keyboardContainer: {
+  container: {
     flex: 1,
     backgroundColor: Colors.mainBackground,
   },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.base,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.sm,
+    backgroundColor: Colors.cardBackground,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borders,
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.mainBackground,
+  },
+  topBarTitle: {
+    ...Typography.h3,
+    fontSize: 16,
+    color: Colors.primaryText,
+  },
   scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: Spacing.xl,
+    padding: Spacing.base,
+    paddingBottom: Spacing.xxl + 20,
   },
-  brandContainer: {
+  headerInfo: {
     alignItems: 'center',
-    marginBottom: Spacing.xl,
+    marginVertical: Spacing.md,
   },
-  iconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: Colors.primaryBlue,
+  iconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.lightBlue,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.sm,
-    ...Shadows.card,
+    marginBottom: Spacing.xs,
+  },
+  mainTitle: {
+    ...Typography.h2,
+    fontSize: 20,
+    color: Colors.darkNavy,
   },
   subtitle: {
-    ...Typography.bodySmall,
+    ...Typography.caption,
     color: Colors.secondaryText,
-    marginTop: Spacing.xs,
+    textAlign: 'center',
+    marginTop: 2,
+    paddingHorizontal: Spacing.md,
   },
   card: {
     backgroundColor: Colors.cardBackground,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.xl,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.base,
     borderWidth: 1,
     borderColor: Colors.borders,
-    ...Shadows.card,
-  },
-  cardTitle: {
-    ...Typography.h2,
-    marginBottom: Spacing.base,
+    ...Shadows.subtle,
   },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.errorLight,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    marginBottom: Spacing.base,
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    marginBottom: Spacing.sm,
     borderWidth: 1,
     borderColor: 'rgba(220, 38, 38, 0.2)',
   },
   errorText: {
-    ...Typography.bodySmall,
+    ...Typography.caption,
     color: Colors.error,
-    marginLeft: Spacing.sm,
+    marginLeft: Spacing.xs,
     flex: 1,
   },
   submitButton: {
-    marginTop: Spacing.md,
+    marginTop: Spacing.sm,
+    height: 48,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: Spacing.xl,
+    marginTop: Spacing.base,
     gap: Spacing.xs,
   },
   loginLink: {
     ...Typography.bodySmall,
     color: Colors.primaryBlue,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });

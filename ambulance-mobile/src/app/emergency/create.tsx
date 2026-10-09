@@ -75,6 +75,7 @@ export default function CreateEmergencyScreen() {
   };
 
   const handleDispatch = async () => {
+    if (loading) return;
     setLoading(true);
     try {
       const capabilities: string[] = [];
@@ -97,6 +98,12 @@ export default function CreateEmergencyScreen() {
 
       router.replace('/emergency/active');
     } catch (err: any) {
+      const msg = (err?.message || '').toLowerCase();
+      if (msg.includes('cancel') || msg.includes('abort') || err?.status === 499) {
+        // If request succeeded or was superseded by navigation, transition safely
+        router.replace('/emergency/active');
+        return;
+      }
       Alert.alert('Dispatch Failed', err.message || 'Could not dispatch emergency to backend.');
     } finally {
       setLoading(false);

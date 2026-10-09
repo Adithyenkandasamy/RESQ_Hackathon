@@ -1,6 +1,16 @@
 import { Platform } from 'react-native';
-import Constants from 'expo-constants';
 import { SecureStorageService } from '../services/secureStorage';
+
+// Safely obtain hostUri from Expo Constants in runtime without breaking Jest CommonJS tests
+const getHostUri = (): string | null => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Constants = require('expo-constants').default || require('expo-constants');
+    return Constants?.expoConfig?.hostUri || null;
+  } catch {
+    return null;
+  }
+};
 
 // Default resolution based on platform and Expo runtime
 const getDefaultBaseUrl = (): string => {
@@ -8,7 +18,7 @@ const getDefaultBaseUrl = (): string => {
     return process.env.EXPO_PUBLIC_API_BASE_URL;
   }
   // In Expo Go on a physical device, resolve automatically to the host computer's LAN IP
-  const hostUri = Constants.expoConfig?.hostUri;
+  const hostUri = getHostUri();
   if (hostUri) {
     const ip = hostUri.split(':')[0];
     if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {

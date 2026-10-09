@@ -29,7 +29,7 @@ settings = get_settings()
 # Initialize AsyncServer with ASGI mode
 sio = socketio.AsyncServer(
     async_mode="asgi",
-    cors_allowed_origins=settings.cors_origin_list,
+    cors_allowed_origins="*" if (settings.DEBUG or settings.APP_ENV == "development") else settings.cors_origin_list,
     logger=False,
     engineio_logger=False,
 )

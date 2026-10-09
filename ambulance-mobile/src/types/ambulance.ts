@@ -1,4 +1,4 @@
-export type AmbulanceStatus = 'AVAILABLE' | 'DISPATCHED' | 'BUSY' | 'OFF_DUTY';
+export type AmbulanceStatus = 'AVAILABLE' | 'BUSY' | 'EN_ROUTE' | 'OUT_OF_SERVICE';
 
 export interface Ambulance {
   id: string;

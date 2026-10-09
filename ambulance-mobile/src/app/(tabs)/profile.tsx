@@ -87,7 +87,7 @@ export default function ProfileScreen() {
               type={
                 ambulance?.operational_status === 'AVAILABLE'
                   ? 'success'
-                  : ambulance?.operational_status === 'DISPATCHED'
+                  : ambulance?.operational_status === 'EN_ROUTE'
                   ? 'warning'
                   : 'neutral'
               }
@@ -98,7 +98,7 @@ export default function ProfileScreen() {
 
           <Text style={styles.sectionLabel}>UPDATE OPERATIONAL READINESS</Text>
           <View style={styles.statusButtonsRow}>
-            {(['AVAILABLE', 'OFF_DUTY', 'BUSY'] as AmbulanceStatus[]).map((st) => {
+            {(['AVAILABLE', 'BUSY', 'OUT_OF_SERVICE'] as AmbulanceStatus[]).map((st) => {
               const isSelected = ambulance?.operational_status === st;
               return (
                 <TouchableOpacity
