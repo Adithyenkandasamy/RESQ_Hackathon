@@ -194,6 +194,66 @@ async def _run_post_booking_ai(emergency_id: uuid.UUID) -> None:
         logger.warning("Post-booking AI background processing notice: %s", exc)
 
 
+async def _run_hospital_matching_bg(emergency_id: uuid.UUID) -> None:
+    """Automatically evaluate candidates and dispatch admission requests upon creation."""
+    try:
+        from app.database import get_db_session
+
+        async for session in get_db_session():
+            stmt = select(Emergency).where(Emergency.id == emergency_id)
+            res = await session.execute(stmt)
+            emergency = res.scalar_one_or_none()
+            if not emergency or emergency.confirmed_hospital_id is not None:
+                return
+
+            settings = get_settings()
+            candidates = await HospitalMatchingService.match_hospitals(
+                session=session,
+                emergency=emergency,
+                max_candidates=settings.HOSPITAL_MATCH_MAX_CANDIDATES,
+                search_radius_km=settings.HOSPITAL_MATCH_SEARCH_RADIUS_KM,
+            )
+            now = datetime.now(timezone.utc)
+            deadline = now + timedelta(seconds=settings.HOSPITAL_RESPONSE_TIMEOUT_SECONDS)
+
+            created_requests = []
+            for cand in candidates:
+                chk_stmt = select(HospitalRequest).where(
+                    HospitalRequest.emergency_id == emergency.id,
+                    HospitalRequest.hospital_id == cand.hospital_id,
+                    HospitalRequest.status.in_(
+                        [
+                            HospitalRequestStatus.PENDING,
+                            HospitalRequestStatus.ACCEPTED,
+                        ]
+                    ),
+                )
+                existing = (await session.execute(chk_stmt)).scalar_one_or_none()
+                if existing is None:
+                    new_req = HospitalRequest(
+                        emergency_id=emergency.id,
+                        hospital_id=cand.hospital_id,
+                        status=HospitalRequestStatus.PENDING,
+                        response_deadline=deadline,
+                    )
+                    session.add(new_req)
+                    created_requests.append(new_req)
+
+            await session.commit()
+            for req in created_requests:
+                await notify_hospital_request_created(
+                    hospital_id=req.hospital_id,
+                    request_id=req.id,
+                    emergency_id=emergency.id,
+                    incident_type=emergency.incident_type,
+                    response_deadline=deadline.isoformat(),
+                )
+            logger.info("Automatic background hospital matching created %d requests for emergency %s", len(created_requests), emergency.id)
+            break
+    except Exception as exc:
+        logger.warning("Background hospital matching notice: %s", exc)
+
+
 @router.post(
     "",
     response_model=EmergencyResponse,
@@ -265,6 +325,7 @@ async def create_emergency(
 
     # Trigger post-booking AI background task asynchronously
     background_tasks.add_task(_run_post_booking_ai, emergency.id)
+    background_tasks.add_task(_run_hospital_matching_bg, emergency.id)
 
     logger.info("Emergency incident created: %s by user %s", emergency.id, current_user.id)
     return _build_emergency_response(reloaded)

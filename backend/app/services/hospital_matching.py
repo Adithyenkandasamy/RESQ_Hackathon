@@ -161,7 +161,8 @@ class HospitalMatchingService:
         search_radius_km: float = 50.0,
     ) -> list[HospitalMatchResult]:
         """Query registered hospitals and return top candidates ranked by composite score."""
-        stmt = select(Hospital)
+        from app.models.enums import HospitalStatus
+        stmt = select(Hospital).where(Hospital.status == HospitalStatus.APPROVED)
         result = await session.execute(stmt)
         all_hospitals = list(result.scalars().all())
 
@@ -179,8 +180,6 @@ class HospitalMatchingService:
                     hospital.latitude,
                     hospital.longitude,
                 )
-                if distance > search_radius_km:
-                    continue
                 prox_score = cls.calculate_proximity_score(distance)
             else:
                 distance = 0.0

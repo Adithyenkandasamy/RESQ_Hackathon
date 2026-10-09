@@ -23,9 +23,9 @@ export function HospitalCaseList() {
     refetchInterval: 10000,
   });
 
-  // Filter cases confirmed for this hospital
+  // Filter cases confirmed for this hospital (or all if admin)
   const allHospitalCases = (emergenciesData?.items || []).filter(
-    (e: EmergencyResponse) => e.confirmed_hospital_id === hospital?.id
+    (e: EmergencyResponse) => !hospital?.id || e.confirmed_hospital_id === hospital?.id
   );
 
   const filteredCases = allHospitalCases.filter((e) => {

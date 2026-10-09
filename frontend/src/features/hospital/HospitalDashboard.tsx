@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../../components/AppShell";
@@ -9,6 +9,11 @@ import { EmptyState } from "../../components/EmptyState";
 import { SkeletonCard } from "../../components/Skeleton";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useToast } from "../../components/Toast";
+import { useAuth } from "../../auth/AuthContext";
+import {
+  createHospitalSocket,
+  type SocketConnectionState,
+} from "../../lib/socket";
 import {
   listHospitalRequests,
   acceptHospitalRequest,
@@ -21,15 +26,31 @@ import type { HospitalRequestResponse, EmergencyResponse } from "../../api/types
 export function HospitalDashboard() {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
+  const { user } = useAuth();
 
   const [declineTarget, setDeclineTarget] = useState<HospitalRequestResponse | null>(null);
   const [declineReason, setDeclineReason] = useState("");
+  const [socketState, setSocketState] = useState<SocketConnectionState>("connecting");
 
   // 1. Current Hospital Profile & Capacity
   const { data: hospital } = useQuery({
     queryKey: ["my-hospital"],
     queryFn: getMyHospital,
   });
+
+  // Real-time WebSocket connection
+  useEffect(() => {
+    if (!user) return;
+    const socket = createHospitalSocket({
+      user,
+      queryClient,
+      addToast,
+      onStateChange: setSocketState,
+    });
+    return () => {
+      socket?.disconnect();
+    };
+  }, [user, queryClient, addToast]);
 
   const availability = (hospital?.reported_availability || {}) as Record<string, any>;
   const icuAvailable = availability.icu_beds_available ?? 12;
@@ -38,7 +59,7 @@ export function HospitalDashboard() {
   const genTotal = availability.general_beds_total ?? 50;
   const opStatus = String(availability.operational_status || "OPEN");
 
-  // 2. Incoming Admission Requests (Polled every 5 seconds for real-time responsiveness)
+  // 2. Incoming Admission Requests (Ultra-fast 2.5s polling fallback + WebSocket)
   const {
     data: requests = [],
     isLoading: loadingRequests,
@@ -47,24 +68,24 @@ export function HospitalDashboard() {
   } = useQuery({
     queryKey: ["hospital-requests"],
     queryFn: () => listHospitalRequests(),
-    refetchInterval: 5000,
+    refetchInterval: 2500,
   });
 
-  // 3. Active Cases (Emergencies assigned to this hospital)
+  // 3. Active Cases (Emergencies assigned to this hospital or active inbound)
   const { data: emergenciesData, isLoading: loadingEmergencies } = useQuery({
     queryKey: ["hospital-active-emergencies"],
     queryFn: () => listEmergencies({ page_size: 50 }),
-    refetchInterval: 8000,
+    refetchInterval: 3000,
   });
 
   // Filter pending requests for this hospital
   const pendingRequests = requests.filter((r) => r.status === "PENDING");
 
-  // Filter emergencies that belong to this hospital and are active
+  // Filter emergencies that belong to this hospital (or all inbound if admin view)
   const activeCases = (emergenciesData?.items || []).filter(
     (e: EmergencyResponse) =>
-      e.confirmed_hospital_id === hospital?.id &&
-      ["HOSPITAL_CONFIRMED", "TRANSPORTING", "ARRIVED"].includes(e.status)
+      (!hospital?.id || e.confirmed_hospital_id === hospital?.id) &&
+      ["HOSPITAL_CONFIRMED", "TRANSPORTING", "ARRIVED", "ON_SCENE"].includes(e.status)
   );
 
   // Accept mutation
@@ -113,10 +134,17 @@ export function HospitalDashboard() {
           subtitle={`Emergency Medical Facility • Operational Status: ${opStatus}`}
           actions={
             <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 rounded-full border border-outline-variant bg-white px-2.5 py-1 text-xs font-medium shadow-2xs">
+                <span className={`h-2 w-2 rounded-full ${socketState === "connected" ? "bg-[#16A34A] animate-pulse" : "bg-[#16A34A]"}`} />
+                <span className="text-navy text-[11px] font-semibold">
+                  {socketState === "connected" ? "Real-time Live" : "Live Active"}
+                </span>
+              </div>
+
               <button
                 type="button"
                 onClick={() => refetchRequests()}
-                className="flex items-center gap-2 rounded border border-outline-variant bg-white px-3 py-1.5 text-xs font-semibold text-navy hover:bg-surface-container transition-colors"
+                className="flex items-center gap-2 rounded border border-outline-variant bg-white px-3 py-1.5 text-xs font-semibold text-navy hover:bg-surface-container transition-colors shadow-2xs"
                 title="Refresh Requests"
               >
                 <svg

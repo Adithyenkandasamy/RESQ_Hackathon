@@ -206,8 +206,8 @@ export interface CreateSocketOptions {
 export function createHospitalSocket(options: CreateSocketOptions): Socket | null {
   const { user, queryClient, addToast, onStateChange } = options;
 
-  // Never connect for unauthenticated or non-hospital users
-  if (!user || user.role !== "HOSPITAL_STAFF" || !user.hospital_id) {
+  // Allow HOSPITAL_STAFF and ADMIN users
+  if (!user || (user.role !== "HOSPITAL_STAFF" && user.role !== "ADMIN")) {
     onStateChange?.("unavailable");
     return null;
   }
@@ -231,7 +231,7 @@ export function createHospitalSocket(options: CreateSocketOptions): Socket | nul
     autoConnect: true,
   });
 
-  const roomName = `hospital:${user.hospital_id}`;
+  const roomName = user.hospital_id ? `hospital:${user.hospital_id}` : "admin";
 
   socket.on("connect", () => {
     onStateChange?.("connected");
