@@ -107,7 +107,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         response.headers[REQUEST_ID_HEADER] = rid
         logger.log(
             log_level,
-            "%s %s → %s",
+            "%s %s -> %s",
             request.method,
             request.url.path,
             response.status_code,

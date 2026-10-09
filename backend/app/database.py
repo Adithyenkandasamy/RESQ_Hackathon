@@ -97,7 +97,7 @@ def init_engine(database_url: str) -> None:
 
     # Mask credentials before logging.
     safe_url = normalized.split("@")[-1] if "@" in normalized else "(no host)"
-    logger.info("Creating database engine → %s", safe_url)
+    logger.info("Creating database engine -> %s", safe_url)
 
     _engine_instance = create_async_engine(
         normalized,
