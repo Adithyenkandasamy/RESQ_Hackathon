@@ -56,6 +56,7 @@ export default function CreateEmergencyScreen() {
   const [recordDuration, setRecordDuration] = useState(0);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordTimer, setRecordTimer] = useState<any>(null);
+  const [pendingAudio, setPendingAudio] = useState<{ uri: string; duration: number } | null>(null);
 
   // 4. GPS & Scene Location
   const [ambulanceLat, setAmbulanceLat] = useState<number | null>(initialLoc?.latitude ?? null);
@@ -157,8 +158,9 @@ export default function CreateEmergencyScreen() {
     try {
       const audioResult = await MediaService.stopAudioRecording();
       if (audioResult) {
-        // Append voice note indicator into text
-        const voiceTag = `[Voice Note (${recordDuration}s recorded)]`;
+        // Save audio for upload after dispatch; show placeholder
+        setPendingAudio({ uri: audioResult.uri, duration: recordDuration });
+        const voiceTag = `[Voice Note (${recordDuration}s) — will transcribe on dispatch]`;
         setPatientCondition((prev) => (prev ? `${prev}\n${voiceTag}` : voiceTag));
       }
     } catch (e: any) {
@@ -195,7 +197,7 @@ export default function CreateEmergencyScreen() {
         patientInfo.images = [capturedImage.uri];
       }
 
-      await createEmergency({
+      const created = await createEmergency({
         incident_type: 'EMERGENCY',
         location_description: narrative,
         incident_latitude: finalLat ?? undefined,
@@ -203,6 +205,28 @@ export default function CreateEmergencyScreen() {
         required_capabilities: ['icu', 'emergency'],
         patient_info: patientInfo,
       });
+
+      // Upload & transcribe pending voice audio now that we have an emergency ID
+      if (pendingAudio && created?.id) {
+        try {
+          const { EmergenciesApi } = await import('../../api/emergencies');
+          const res = await EmergenciesApi.uploadAudio(created.id, {
+            uri: pendingAudio.uri,
+            name: 'patient_voice_note.m4a',
+            type: 'audio/m4a',
+          });
+          if (res.transcription_text) {
+            // Update patient info with real transcription
+            await EmergenciesApi.updatePatientInfo(created.id, {
+              ...patientInfo,
+              condition_description: res.transcription_text,
+            });
+          }
+        } catch (transcribeErr) {
+          // Non-fatal: transcription failed but dispatch succeeded
+          console.warn('Post-dispatch transcription failed:', transcribeErr);
+        }
+      }
 
       router.replace('/emergency/active');
     } catch (err: any) {

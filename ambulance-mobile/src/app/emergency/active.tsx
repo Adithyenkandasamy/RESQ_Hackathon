@@ -8,14 +8,9 @@ import {
   Linking,
   Platform,
   Alert,
-  TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useEmergency } from '../../context/EmergencyContext';
-import { LocationService } from '../../services/location';
-import { EmergenciesApi } from '../../api/emergencies';
-import { MediaService } from '../../services/media';
-import { SecureStorageService } from '../../services/secureStorage';
 import { EmergencyStatus } from '../../types/emergency';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AppButton } from '../../components/AppButton';
@@ -27,17 +22,11 @@ import {
   Building2,
   Navigation,
   Phone,
-  Mic,
   CheckCircle2,
   Clock,
   AlertCircle,
   RefreshCw,
   ArrowRight,
-  Activity,
-  Send,
-  Square,
-  ChevronUp,
-  ChevronDown,
 } from 'lucide-react-native';
 
 function getNextAction(status: EmergencyStatus): {
@@ -71,102 +60,10 @@ export default function ActiveEmergencyScreen() {
     confirmedHospital,
     refreshActiveEmergency,
     updateStatus,
+    completeHandover,
     clearActiveEmergency,
   } = useEmergency();
   const [updating, setUpdating] = useState(false);
-  const [patientNote, setPatientNote] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordDuration, setRecordDuration] = useState(0);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const [isUpdatingNote, setIsUpdatingNote] = useState(false);
-  const [recordTimer, setRecordTimer] = useState<any>(null);
-  const [patientCardCollapsed, setPatientCardCollapsed] = useState(false);
-
-  React.useEffect(() => {
-    if (activeEmergency) {
-      const existing =
-        (activeEmergency.patient_info?.condition_description as string) ||
-        activeEmergency.incident_description ||
-        '';
-      setPatientNote(existing);
-    }
-    SecureStorageService.getPatientNotesCollapsed()
-      .then(setPatientCardCollapsed)
-      .catch(() => {});
-  }, [activeEmergency?.id]);
-
-  const togglePatientCard = async () => {
-    const next = !patientCardCollapsed;
-    setPatientCardCollapsed(next);
-    await SecureStorageService.setPatientNotesCollapsed(next);
-  };
-
-  const startVoiceNote = async () => {
-    const started = await MediaService.startAudioRecording();
-    if (started) {
-      setIsRecording(true);
-      setRecordDuration(0);
-      const timer = setInterval(() => {
-        setRecordDuration((prev) => prev + 1);
-      }, 1000);
-      setRecordTimer(timer);
-    } else {
-      Alert.alert('Microphone Error', 'Could not access device microphone.');
-    }
-  };
-
-  const stopVoiceNote = async () => {
-    if (!activeEmergency) return;
-    if (recordTimer) {
-      clearInterval(recordTimer);
-      setRecordTimer(null);
-    }
-    setIsRecording(false);
-    setIsTranscribing(true);
-    try {
-      const result = await MediaService.stopAudioRecording();
-      if (result) {
-        const res = await EmergenciesApi.uploadAudio(activeEmergency.id, {
-          uri: result.uri,
-          name: 'patient_voice_note.m4a',
-          type: 'audio/m4a',
-        });
-        if (res.transcription_text) {
-          const appended = patientNote
-            ? `${patientNote}\n[Voice]: ${res.transcription_text}`
-            : res.transcription_text;
-          setPatientNote(appended);
-          await EmergenciesApi.updatePatientInfo(activeEmergency.id, {
-            ...activeEmergency.patient_info,
-            condition_description: appended,
-          });
-          await refreshActiveEmergency();
-          Alert.alert('Voice Note Transcribed', 'Transcribed and transmitted live to receiving hospital.');
-        }
-      }
-    } catch (err: any) {
-      Alert.alert('Voice Processing Error', err.message || 'Could not transcribe voice note.');
-    } finally {
-      setIsTranscribing(false);
-    }
-  };
-
-  const handleSendPatientNote = async () => {
-    if (!activeEmergency || !patientNote.trim()) return;
-    setIsUpdatingNote(true);
-    try {
-      await EmergenciesApi.updatePatientInfo(activeEmergency.id, {
-        ...activeEmergency.patient_info,
-        condition_description: patientNote.trim(),
-      });
-      await refreshActiveEmergency();
-      Alert.alert('Transmitted to Hospital', 'Patient condition notes updated and visible to hospital triage.');
-    } catch (err: any) {
-      Alert.alert('Update Failed', err.message || 'Could not send patient note to hospital.');
-    } finally {
-      setIsUpdatingNote(false);
-    }
-  };
 
   if (!activeEmergency) {
     return (
@@ -291,135 +188,65 @@ export default function ActiveEmergencyScreen() {
           </View>
         )}
 
-        {/* Live Patient Condition & Voice/Text Note */}
-        <View style={styles.patientConditionCard}>
-          <View style={styles.conditionHeader}>
-            <View style={styles.conditionTitleRow}>
-              <Activity size={18} color={Colors.primaryBlue} />
-              <Text style={styles.conditionTitle}>Patient Condition & Field Notes</Text>
-            </View>
-            <View style={styles.conditionHeaderRight}>
-              <View style={styles.liveBadge}>
-                <View style={styles.liveDot} />
-                <Text style={styles.liveText}>LIVE TO HOSPITAL</Text>
-              </View>
-              <TouchableOpacity
-                style={styles.collapseBtn}
-                onPress={togglePatientCard}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  patientCardCollapsed
-                    ? 'Expand patient condition notes'
-                    : 'Close patient condition notes'
-                }
-                activeOpacity={0.7}
-              >
-                {patientCardCollapsed ? (
-                  <ChevronDown size={18} color={Colors.secondaryText} />
-                ) : (
-                  <ChevronUp size={18} color={Colors.secondaryText} />
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {patientCardCollapsed ? (
-            <TouchableOpacity
-              style={styles.collapsedHint}
-              onPress={togglePatientCard}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.collapsedHintText}>
-                Notes hidden. Tap to reopen and edit the latest field update.
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <>
-              <Text style={styles.conditionHint}>
-                Describe current condition (conscious state, vitals, pain, injuries). Type or record voice note.
-              </Text>
-
-              <TextInput
-                style={styles.conditionInput}
-                multiline
-                numberOfLines={3}
-                placeholder="e.g. 52M, conscious, acute crushing chest pain radiating to left jaw, BP 140/90, SpO2 94%, given 325mg aspirin..."
-                placeholderTextColor={Colors.secondaryText}
-                value={patientNote}
-                onChangeText={setPatientNote}
-              />
-
-              <View style={styles.conditionActionsRow}>
-                {isRecording ? (
-                  <TouchableOpacity
-                    style={styles.recordingBtn}
-                    onPress={stopVoiceNote}
-                    activeOpacity={0.8}
-                  >
-                    <Square size={16} color="#FFFFFF" />
-                    <Text style={styles.recordingBtnText}>
-                      Stop & Transcribe ({recordDuration}s)
-                    </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.voiceBtn}
-                    onPress={startVoiceNote}
-                    disabled={isTranscribing}
-                    activeOpacity={0.8}
-                  >
-                    <Mic size={16} color={Colors.primaryBlue} />
-                    <Text style={styles.voiceBtnText}>
-                      {isTranscribing ? 'Transcribing...' : 'Record Voice'}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-
-                <TouchableOpacity
-                  style={[
-                    styles.sendNoteBtn,
-                    (!patientNote.trim() || isUpdatingNote) && styles.sendNoteBtnDisabled,
-                  ]}
-                  onPress={handleSendPatientNote}
-                  disabled={!patientNote.trim() || isUpdatingNote}
-                  activeOpacity={0.8}
-                >
-                  <Send size={15} color="#FFFFFF" />
-                  <Text style={styles.sendNoteBtnText}>
-                    {isUpdatingNote ? 'Sending...' : 'Send Live Update'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
-        </View>
-
-
-        {/* Conclude / Cancel Incident Button */}
+        {/* Patient Delivered / Admitted Button */}
         <TouchableOpacity
           style={{
             marginTop: Spacing.lg,
-            paddingVertical: 12,
+            paddingVertical: 16,
             alignItems: 'center',
             justifyContent: 'center',
             borderRadius: BorderRadius.md,
-            borderWidth: 1,
-            borderColor: '#FECACA',
-            backgroundColor: '#FEF2F2',
+            backgroundColor: Colors.medicalGreen,
+            flexDirection: 'row',
+            gap: 8,
           }}
           onPress={() => {
             Alert.alert(
-              'Conclude / Cancel Mission',
-              'Do you want to finalize and conclude this emergency mission?',
+              'Complete Hospital Handover',
+              'Confirm that the patient has been delivered and admitted to the hospital. This will close this mission.',
               [
-                { text: 'Keep Mission Active', style: 'cancel' },
+                { text: 'Cancel', style: 'cancel' },
                 {
-                  text: 'Conclude & Clear',
+                  text: 'Confirm Admitted',
+                  style: 'default',
+                  onPress: async () => {
+                    try {
+                      await completeHandover('Patient delivered and admitted to hospital by crew.');
+                    } catch {
+                      try {
+                        await updateStatus('HANDOVER_COMPLETED' as any, 'Patient admitted to hospital.');
+                      } catch {
+                        clearActiveEmergency();
+                      }
+                    }
+                    router.replace('/(tabs)/home');
+                  },
+                },
+              ]
+            );
+          }}
+        >
+          <CheckCircle2 size={20} color="#FFFFFF" />
+          <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '800' }}>
+            Patient Delivered — Complete Handover
+          </Text>
+        </TouchableOpacity>
+
+        {/* Cancel Mission */}
+        <TouchableOpacity
+          style={{ marginTop: Spacing.md, alignItems: 'center', paddingVertical: 8 }}
+          onPress={() => {
+            Alert.alert(
+              'Cancel Mission',
+              'Are you sure you want to cancel this emergency mission?',
+              [
+                { text: 'Keep Active', style: 'cancel' },
+                {
+                  text: 'Cancel Mission',
                   style: 'destructive',
                   onPress: async () => {
                     try {
-                      await updateStatus('CANCELLED' as any, 'Concluded by crew');
+                      await updateStatus('CANCELLED' as any, 'Cancelled by crew');
                     } catch {
                       clearActiveEmergency();
                     }
@@ -430,8 +257,8 @@ export default function ActiveEmergencyScreen() {
             );
           }}
         >
-          <Text style={{ color: Colors.error, fontSize: 13, fontWeight: '700' }}>
-            Conclude / Cancel Incident
+          <Text style={{ color: Colors.secondaryText, fontSize: 12, fontWeight: '600' }}>
+            Cancel Mission
           </Text>
         </TouchableOpacity>
       </ScrollView>
