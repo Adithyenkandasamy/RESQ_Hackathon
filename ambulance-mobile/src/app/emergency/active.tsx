@@ -228,7 +228,7 @@ export default function ActiveEmergencyScreen() {
         >
           <CheckCircle2 size={20} color="#FFFFFF" />
           <Text style={{ color: '#FFFFFF', fontSize: 15, fontWeight: '800' }}>
-            Patient Delivered — Complete Handover
+            Patient Reached — Complete
           </Text>
         </TouchableOpacity>
 
