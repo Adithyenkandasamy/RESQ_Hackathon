@@ -1,6 +1,6 @@
 """API routers package."""
 
-from app.routers import admin, ambulances, auth, emergencies, health, hospitals
+from app.routers import admin, ambulances, auth, emergencies, health, hospital_requests, hospitals
 
 __all__ = [
     "admin",
@@ -8,5 +8,6 @@ __all__ = [
     "auth",
     "emergencies",
     "health",
+    "hospital_requests",
     "hospitals",
 ]

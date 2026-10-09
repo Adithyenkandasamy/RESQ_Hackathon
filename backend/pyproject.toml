@@ -16,6 +16,10 @@ dependencies = [
     "pyjwt[crypto]>=2.9.0",
     "argon2-cffi>=23.1.0",
     "email-validator>=2.0.0",
+    "python-socketio>=5.11.0",
+    "groq>=0.11.0",
+    "elevenlabs>=1.0.0",
+    "python-multipart>=0.0.18",
 ]
 
 [dependency-groups]
@@ -70,6 +74,15 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "socketio"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "app.core.socket"
+disallow_untyped_decorators = false
+
 
 
 

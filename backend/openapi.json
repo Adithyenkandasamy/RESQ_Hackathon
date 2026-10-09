@@ -122,6 +122,64 @@
         "title": "AmbulanceStatus",
         "type": "string"
       },
+      "Body_transcribe_emergency_audio_api_v1_emergencies__emergency_id__transcription_post": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_transcribe_emergency_audio_api_v1_emergencies__emergency_id__transcription_post",
+        "type": "object"
+      },
+      "ConfirmedAssignmentResponse": {
+        "description": "Authoritative confirmed destination hospital for an emergency.",
+        "properties": {
+          "confirmed_hospital_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Hospital Id"
+          },
+          "confirmed_hospital_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Hospital Name"
+          },
+          "emergency_id": {
+            "format": "uuid",
+            "title": "Emergency Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "emergency_id",
+          "confirmed_hospital_id",
+          "status"
+        ],
+        "title": "ConfirmedAssignmentResponse",
+        "type": "object"
+      },
       "EmergencyCreate": {
         "additionalProperties": false,
         "description": "Payload to register a new emergency incident.",
@@ -477,6 +535,98 @@
         "title": "EmergencyStatusUpdate",
         "type": "object"
       },
+      "ExtractionRequest": {
+        "additionalProperties": false,
+        "description": "Optional payload to extract observations from user-provided text instead of stored transcript.",
+        "properties": {
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Raw text or scene notes to extract observations from",
+            "title": "Text"
+          }
+        },
+        "title": "ExtractionRequest",
+        "type": "object"
+      },
+      "FirstAidGuidanceResponse": {
+        "description": "Constrained first-aid supportive guidance.",
+        "properties": {
+          "critical_precautions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Critical Precautions",
+            "type": "array"
+          },
+          "disclaimer": {
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "guidance_steps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Guidance Steps",
+            "type": "array"
+          },
+          "is_ai_generated": {
+            "default": true,
+            "title": "Is Ai Generated",
+            "type": "boolean"
+          },
+          "model_used": {
+            "title": "Model Used",
+            "type": "string"
+          },
+          "protocol_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocol Id"
+          },
+          "protocol_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocol Title"
+          },
+          "protocol_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocol Version"
+          }
+        },
+        "required": [
+          "disclaimer",
+          "model_used"
+        ],
+        "title": "FirstAidGuidanceResponse",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -488,6 +638,66 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HandoverSummaryResponse": {
+        "description": "Structured clinical handover draft.",
+        "properties": {
+          "actions_taken": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Actions Taken",
+            "type": "array"
+          },
+          "critical_unknowns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Critical Unknowns",
+            "type": "array"
+          },
+          "incident_overview": {
+            "title": "Incident Overview",
+            "type": "string"
+          },
+          "is_ai_generated": {
+            "default": true,
+            "title": "Is Ai Generated",
+            "type": "boolean"
+          },
+          "model_used": {
+            "title": "Model Used",
+            "type": "string"
+          },
+          "recorded_vital_signs": {
+            "additionalProperties": true,
+            "title": "Recorded Vital Signs",
+            "type": "object"
+          },
+          "reported_symptoms_and_injuries": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reported Symptoms And Injuries",
+            "type": "array"
+          },
+          "review_status": {
+            "title": "Review Status",
+            "type": "string"
+          },
+          "summary_id": {
+            "title": "Summary Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary_id",
+          "incident_overview",
+          "review_status",
+          "model_used"
+        ],
+        "title": "HandoverSummaryResponse",
         "type": "object"
       },
       "HospitalAvailabilityUpdate": {
@@ -574,6 +784,196 @@
         ],
         "title": "HospitalCreate",
         "type": "object"
+      },
+      "HospitalMatchCandidateResponse": {
+        "description": "Hospital match candidate scored by the rules-based matching service.",
+        "properties": {
+          "availability_score": {
+            "title": "Availability Score",
+            "type": "number"
+          },
+          "availability_status": {
+            "title": "Availability Status",
+            "type": "string"
+          },
+          "capability_score": {
+            "title": "Capability Score",
+            "type": "number"
+          },
+          "composite_score": {
+            "title": "Composite Score",
+            "type": "number"
+          },
+          "distance_km": {
+            "title": "Distance Km",
+            "type": "number"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "hospital_id": {
+            "format": "uuid",
+            "title": "Hospital Id",
+            "type": "string"
+          },
+          "hospital_name": {
+            "title": "Hospital Name",
+            "type": "string"
+          },
+          "matched_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Capabilities",
+            "type": "array"
+          },
+          "proximity_score": {
+            "title": "Proximity Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "hospital_id",
+          "hospital_name",
+          "distance_km",
+          "composite_score",
+          "capability_score",
+          "availability_score",
+          "proximity_score",
+          "matched_capabilities",
+          "availability_status",
+          "explanation"
+        ],
+        "title": "HospitalMatchCandidateResponse",
+        "type": "object"
+      },
+      "HospitalMatchResponse": {
+        "description": "Result of triggering rules-based matching for an emergency.",
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/HospitalMatchCandidateResponse"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "emergency_id": {
+            "format": "uuid",
+            "title": "Emergency Id",
+            "type": "string"
+          },
+          "requests_created": {
+            "title": "Requests Created",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "emergency_id",
+          "candidates",
+          "requests_created"
+        ],
+        "title": "HospitalMatchResponse",
+        "type": "object"
+      },
+      "HospitalRequestDeclinePayload": {
+        "additionalProperties": false,
+        "description": "Payload when a hospital declines an admission request.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional clinical or operational reason for declining",
+            "title": "Reason"
+          }
+        },
+        "title": "HospitalRequestDeclinePayload",
+        "type": "object"
+      },
+      "HospitalRequestResponse": {
+        "description": "Public representation of an emergency admission request to a hospital.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "emergency_id": {
+            "format": "uuid",
+            "title": "Emergency Id",
+            "type": "string"
+          },
+          "hospital_id": {
+            "format": "uuid",
+            "title": "Hospital Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "responded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Responded At"
+          },
+          "response_deadline": {
+            "format": "date-time",
+            "title": "Response Deadline",
+            "type": "string"
+          },
+          "response_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Reason"
+          },
+          "status": {
+            "$ref": "#/components/schemas/HospitalRequestStatus"
+          }
+        },
+        "required": [
+          "id",
+          "emergency_id",
+          "hospital_id",
+          "status",
+          "created_at",
+          "response_deadline"
+        ],
+        "title": "HospitalRequestResponse",
+        "type": "object"
+      },
+      "HospitalRequestStatus": {
+        "description": "Status of a hospital dispatch/admission request.",
+        "enum": [
+          "PENDING",
+          "ACCEPTED",
+          "DECLINED",
+          "EXPIRED",
+          "CANCELLED"
+        ],
+        "title": "HospitalRequestStatus",
+        "type": "string"
       },
       "HospitalResponse": {
         "description": "Public hospital representation.",
@@ -770,6 +1170,78 @@
         "title": "LoginRequest",
         "type": "object"
       },
+      "ObservationExtractionResponse": {
+        "description": "Structured clinical observations extracted by AI.",
+        "properties": {
+          "factual_summary": {
+            "title": "Factual Summary",
+            "type": "string"
+          },
+          "incident_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incident Type"
+          },
+          "model_used": {
+            "title": "Model Used",
+            "type": "string"
+          },
+          "patient_responsiveness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Responsiveness"
+          },
+          "reported_injuries": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reported Injuries",
+            "type": "array"
+          },
+          "reported_symptoms": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reported Symptoms",
+            "type": "array"
+          },
+          "review_required": {
+            "default": true,
+            "title": "Review Required",
+            "type": "boolean"
+          },
+          "unknown_or_missing_info": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unknown Or Missing Info",
+            "type": "array"
+          },
+          "vital_signs": {
+            "additionalProperties": true,
+            "title": "Vital Signs",
+            "type": "object"
+          }
+        },
+        "required": [
+          "factual_summary",
+          "model_used"
+        ],
+        "title": "ObservationExtractionResponse",
+        "type": "object"
+      },
       "PaginatedResponse_EmergencyResponse_": {
         "properties": {
           "items": {
@@ -865,6 +1337,47 @@
           "expires_in"
         ],
         "title": "TokenResponse",
+        "type": "object"
+      },
+      "TranscriptionResponse": {
+        "description": "Result of speech-to-text audio transcription.",
+        "properties": {
+          "emergency_id": {
+            "format": "uuid",
+            "title": "Emergency Id",
+            "type": "string"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "processing_status": {
+            "title": "Processing Status",
+            "type": "string"
+          },
+          "transcript": {
+            "title": "Transcript",
+            "type": "string"
+          },
+          "transcription_id": {
+            "title": "Transcription Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transcription_id",
+          "emergency_id",
+          "transcript",
+          "processing_status"
+        ],
+        "title": "TranscriptionResponse",
         "type": "object"
       },
       "UserResponse": {
@@ -1361,6 +1874,219 @@
         ]
       }
     },
+    "/api/v1/emergencies/{emergency_id}/ai/extract": {
+      "post": {
+        "description": "Convert raw text or scene description into validated structured observations.",
+        "operationId": "extract_emergency_observations_api_v1_emergencies__emergency_id__ai_extract_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "emergency_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Emergency Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ExtractionRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObservationExtractionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Extract structured clinical observations with Groq AI",
+        "tags": [
+          "Emergencies"
+        ]
+      }
+    },
+    "/api/v1/emergencies/{emergency_id}/ai/first-aid": {
+      "post": {
+        "description": "Get supportive scene first-aid guidance constrained strictly by approved protocols.",
+        "operationId": "get_emergency_first_aid_guidance_api_v1_emergencies__emergency_id__ai_first_aid_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "emergency_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Emergency Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FirstAidGuidanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Retrieve constrained first-aid supportive guidance from approved protocols",
+        "tags": [
+          "Emergencies"
+        ]
+      }
+    },
+    "/api/v1/emergencies/{emergency_id}/ai/handover-summary": {
+      "post": {
+        "description": "Generate concise clinical handover draft for receiving hospital staff.",
+        "operationId": "generate_emergency_handover_summary_api_v1_emergencies__emergency_id__ai_handover_summary_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "emergency_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Emergency Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoverSummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Generate clinical handover summary draft with Groq AI",
+        "tags": [
+          "Emergencies"
+        ]
+      }
+    },
+    "/api/v1/emergencies/{emergency_id}/assignment": {
+      "get": {
+        "description": "Retrieve the authoritative confirmed destination hospital.",
+        "operationId": "get_emergency_assignment_api_v1_emergencies__emergency_id__assignment_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "emergency_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Emergency Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmedAssignmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Retrieve confirmed hospital assignment for an emergency",
+        "tags": [
+          "Emergencies"
+        ]
+      }
+    },
     "/api/v1/emergencies/{emergency_id}/history": {
       "get": {
         "description": "Retrieve chronological audit trail of state changes and modifications.",
@@ -1473,6 +2199,55 @@
         ]
       }
     },
+    "/api/v1/emergencies/{emergency_id}/match-hospitals": {
+      "post": {
+        "description": "Evaluate and rank eligible registered hospitals using deterministic rules-based matching.\n\nCreates persistent HospitalRequest records and notifies receiving hospital dashboards via Socket.IO.",
+        "operationId": "match_and_dispatch_hospitals_api_v1_emergencies__emergency_id__match_hospitals_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "emergency_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Emergency Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HospitalMatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Trigger rules-based hospital matching and dispatch admission requests",
+        "tags": [
+          "Emergencies"
+        ]
+      }
+    },
     "/api/v1/emergencies/{emergency_id}/patient": {
       "patch": {
         "description": "Update patient observations for an emergency.",
@@ -1527,6 +2302,59 @@
           }
         ],
         "summary": "Update patient information",
+        "tags": [
+          "Emergencies"
+        ]
+      }
+    },
+    "/api/v1/emergencies/{emergency_id}/requests": {
+      "get": {
+        "description": "Retrieve all hospital requests generated for this emergency incident.",
+        "operationId": "get_emergency_requests_api_v1_emergencies__emergency_id__requests_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "emergency_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Emergency Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HospitalRequestResponse"
+                  },
+                  "title": "Response Get Emergency Requests Api V1 Emergencies  Emergency Id  Requests Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List admission requests dispatched for an emergency",
         "tags": [
           "Emergencies"
         ]
@@ -1588,6 +2416,288 @@
         "summary": "Transition emergency status",
         "tags": [
           "Emergencies"
+        ]
+      }
+    },
+    "/api/v1/emergencies/{emergency_id}/transcription": {
+      "post": {
+        "description": "Upload and transcribe scene audio recording. Non-blocking to dispatch.",
+        "operationId": "transcribe_emergency_audio_api_v1_emergencies__emergency_id__transcription_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "emergency_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Emergency Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_transcribe_emergency_audio_api_v1_emergencies__emergency_id__transcription_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Transcribe emergency radio/voice audio with ElevenLabs",
+        "tags": [
+          "Emergencies"
+        ]
+      }
+    },
+    "/api/v1/hospital-requests": {
+      "get": {
+        "description": "Retrieve hospital admission requests.\n\nHospital staff only see requests directed to their assigned hospital.\nAdministrators can see all requests.",
+        "operationId": "list_hospital_requests_api_v1_hospital_requests_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/HospitalRequestStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HospitalRequestResponse"
+                  },
+                  "title": "Response List Hospital Requests Api V1 Hospital Requests Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List admission requests for current hospital",
+        "tags": [
+          "Hospital Requests"
+        ]
+      }
+    },
+    "/api/v1/hospital-requests/{request_id}": {
+      "get": {
+        "description": "Retrieve details of a specific hospital request.",
+        "operationId": "get_hospital_request_api_v1_hospital_requests__request_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HospitalRequestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get hospital admission request details",
+        "tags": [
+          "Hospital Requests"
+        ]
+      }
+    },
+    "/api/v1/hospital-requests/{request_id}/accept": {
+      "post": {
+        "description": "Accept an emergency request with strict PostgreSQL row-level concurrency locking.\n\nGuarantees that competing concurrent acceptance attempts from multiple hospitals\nwill safely result in exactly one winning destination assignment and a 409 Conflict\nfor losing requests.",
+        "operationId": "accept_hospital_request_api_v1_hospital_requests__request_id__accept_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HospitalRequestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Accept an inbound emergency admission request (Concurrency Safe)",
+        "tags": [
+          "Hospital Requests"
+        ]
+      }
+    },
+    "/api/v1/hospital-requests/{request_id}/decline": {
+      "post": {
+        "description": "Decline an admission request. Idempotent if already declined.",
+        "operationId": "decline_hospital_request_api_v1_hospital_requests__request_id__decline_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/HospitalRequestDeclinePayload"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HospitalRequestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Decline an inbound emergency admission request",
+        "tags": [
+          "Hospital Requests"
         ]
       }
     },

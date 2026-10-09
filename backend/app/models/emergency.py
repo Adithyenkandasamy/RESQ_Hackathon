@@ -79,6 +79,13 @@ class Emergency(Base):
         index=True,
     )
 
+    # Phase 3 AI artifacts (non-blocking, persisted for review)
+    transcription: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    ai_extractions: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON, default=list, nullable=True
+    )
+    handover_summary: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, nullable=False, index=True
     )

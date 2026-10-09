@@ -49,6 +49,19 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    # ── AI & Speech Providers ────────────────────────────────────
+    ELEVENLABS_API_KEY: str = ""
+    ELEVENLABS_TRANSCRIPTION_MODEL: str = "scribe_v1"
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    AI_REQUEST_TIMEOUT_SECONDS: float = 30.0
+    MAX_AUDIO_UPLOAD_BYTES: int = 26214400  # 25 MB
+
+    # ── Dispatch & Matching ──────────────────────────────────────
+    HOSPITAL_RESPONSE_TIMEOUT_SECONDS: int = 120
+    HOSPITAL_MATCH_SEARCH_RADIUS_KM: float = 50.0
+    HOSPITAL_MATCH_MAX_CANDIDATES: int = 3
+
     # ── Validators ───────────────────────────────────────────────
 
     @field_validator("APP_ENV")

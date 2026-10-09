@@ -15,6 +15,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import socketio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
@@ -22,7 +23,16 @@ from fastapi.responses import PlainTextResponse
 from app.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import RequestIdMiddleware, setup_logging
-from app.routers import admin, ambulances, auth, emergencies, health, hospitals
+from app.core.socket import sio
+from app.routers import (
+    admin,
+    ambulances,
+    auth,
+    emergencies,
+    health,
+    hospital_requests,
+    hospitals,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +112,7 @@ def create_app() -> FastAPI:
     application.include_router(hospitals.router, prefix=settings.API_V1_PREFIX)
     application.include_router(ambulances.router, prefix=settings.API_V1_PREFIX)
     application.include_router(emergencies.router, prefix=settings.API_V1_PREFIX)
+    application.include_router(hospital_requests.router, prefix=settings.API_V1_PREFIX)
     application.include_router(admin.router, prefix=settings.API_V1_PREFIX)
 
     # ── Root endpoint ───────────────────────────────────────────
@@ -133,5 +144,8 @@ def create_app() -> FastAPI:
     return application
 
 
-# The global ``app`` object used by uvicorn.
-app = create_app()
+# The FastAPI application instance
+fastapi_app = create_app()
+
+# The global ASGI application instance combining FastAPI and Socket.IO for uvicorn
+app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app, socketio_path="socket.io")

@@ -1,102 +1,167 @@
 # Emergency Response Coordination System — Backend
 
-> **Phase 2: Database Models, Authentication, and Core APIs**
+> **Phase 3: Hospital Matching, Socket.IO, and AI Integration**
 
 Production-minded FastAPI backend for the Emergency Response Coordination
-System (ERCS). Building upon the Phase 1 foundation, Phase 2 implements
-database models, secure JWT authentication with Argon2 password hashing,
-role-based and organization-scoped authorization, core CRUD APIs, an
-audited emergency lifecycle state machine, and administrative oversight.
+System (ERCS). Building upon the Phase 1 foundation and Phase 2 data/auth models,
+Phase 3 implements rules-based hospital matching, persistent admission requests,
+concurrency-safe destination hospital assignment, ASGI-mounted Socket.IO real-time
+notifications, ElevenLabs voice transcription, Groq clinical observation extraction,
+handover summarization, and clinically constrained first-aid guidance.
 
 ---
 
 ## Technology Stack
 
-| Layer          | Technology                           |
-| -------------- | ------------------------------------ |
-| Framework      | FastAPI 0.115                        |
-| Language       | Python ≥ 3.10 (3.14 compatible)      |
-| Database       | PostgreSQL (Aiven) via asyncpg       |
-| ORM            | SQLAlchemy 2.x (async)               |
-| Migrations     | Alembic 1.16                         |
-| Authentication | JWT (PyJWT) + Argon2id (argon2-cffi) |
-| Validation     | Pydantic v2 + Pydantic Settings      |
-| Testing        | pytest + HTTPX + aiosqlite (isolated)|
-| Linting & Types| Ruff + mypy (strict)                 |
-| Package mgr    | uv                                   |
+| Layer          | Technology                                   |
+| -------------- | -------------------------------------------- |
+| Framework      | FastAPI 0.115 + python-socketio (ASGI App)   |
+| Language       | Python ≥ 3.10 (3.14 compatible)              |
+| Database       | PostgreSQL (Aiven) via asyncpg               |
+| ORM            | SQLAlchemy 2.x (async)                       |
+| Migrations     | Alembic 1.16                                 |
+| Real-Time      | Socket.IO (ASGI mounted with JWT auth)       |
+| Speech-to-Text | ElevenLabs API                               |
+| AI Extraction  | Groq API (LLaMA-3 / JSON-mode validation)    |
+| Authentication | JWT (PyJWT) + Argon2id (argon2-cffi)         |
+| Validation     | Pydantic v2 + Pydantic Settings              |
+| Testing        | pytest + HTTPX + aiosqlite (isolated)        |
+| Linting & Types| Ruff + mypy (strict)                         |
+| Package mgr    | uv                                           |
 
 ---
 
-## Folder Structure
+## Phase 3 Features
 
-```
-backend/
-├── app/
-│   ├── __init__.py          # Package marker
-│   ├── main.py              # FastAPI application entry point
-│   ├── config.py            # Pydantic Settings configuration + JWT configs
-│   ├── database.py          # Async SQLAlchemy engine + sessions
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── logging.py       # Structured logging + request-ID middleware
-│   │   ├── errors.py        # Centralized exception handlers
-│   │   ├── cache.py         # In-process TTL cache
-│   │   ├── security.py      # Argon2 password hashing + JWT token handling
-│   │   └── auth.py          # FastAPI dependencies: get_current_user, require_roles
-│   ├── models/
-│   │   ├── __init__.py      # Exported models & Base
-│   │   ├── enums.py         # UserRole, AmbulanceStatus, EmergencyStatus, etc.
-│   │   ├── user.py          # User account model
-│   │   ├── hospital.py      # Hospital model
-│   │   ├── ambulance.py     # Ambulance model
-│   │   ├── emergency.py     # Emergency incident model
-│   │   ├── hospital_request.py # Hospital admission request model
-│   │   └── emergency_history.py # Emergency audit trail model
-│   ├── schemas/
-│   │   ├── __init__.py      # Exported Pydantic schemas
-│   │   ├── common.py        # PaginationParams & PaginatedResponse[T]
-│   │   ├── auth.py          # LoginRequest, TokenResponse, UserResponse
-│   │   ├── hospital.py      # HospitalCreate, HospitalUpdate, HospitalResponse
-│   │   ├── ambulance.py     # AmbulanceAvailabilityUpdate, AmbulanceResponse
-│   │   ├── emergency.py     # EmergencyCreate, EmergencyPatientUpdate, etc.
-│   │   └── admin.py         # AdminDashboardResponse
-│   └── routers/
-│       ├── __init__.py
-│       ├── health.py        # /health/live, /health/ready
-│       ├── auth.py          # /api/v1/auth/login, /api/v1/auth/me
-│       ├── hospitals.py     # /api/v1/hospitals endpoints
-│       ├── ambulances.py    # /api/v1/ambulances/me endpoints
-│       ├── emergencies.py   # /api/v1/emergencies endpoints & transitions
-│       └── admin.py         # /api/v1/admin/dashboard
-├── migrations/              # Alembic migration scripts
-│   ├── env.py
-│   ├── script.py.mako
-│   └── versions/
-│       └── adbc4e6f26e3_phase2_initial_schema.py
-├── scripts/
-│   ├── export_openapi.py    # Export application OpenAPI spec to openapi.json
-│   └── create_admin.py      # Safe CLI utility to provision admin accounts
-├── tests/
-│   ├── conftest.py          # In-memory SQLite async test database fixtures
-│   ├── test_health.py       # Health / root / request-ID tests
-│   ├── test_cache.py        # Cache unit tests
-│   ├── test_errors.py       # Error format tests
-│   ├── test_auth.py         # Auth, JWT, login, disabled user tests
-│   ├── test_hospitals.py    # Hospital CRUD, scoping, availability tests
-│   ├── test_ambulances.py   # Ambulance profile & availability tests
-│   ├── test_emergencies.py  # Emergency lifecycle, transitions, history tests
-│   └── test_admin.py        # Admin dashboard and role-restriction tests
-├── openapi.json             # Exported OpenAPI schema
-├── pyproject.toml           # Dependencies + tool config
-├── uv.lock                  # Locked dependency versions
-├── Dockerfile
-├── compose.yaml
-└── README.md                # This file
+### 1. Deterministic Hospital Matching
+- **Algorithm**: Rules-based scoring using incident coordinates, hospital coordinates (Haversine formula), reported capability overlap, and explicit operational availability.
+- **Scoring**:
+  - Distance score: scaled `max(0, 100 - (distance_km * 2.5))` (up to 40km reach).
+  - Capability score: +20 points per matched clinical capability required by the incident.
+  - Availability modifier: `AVAILABLE` (+25 points), `FULL` (-100 points), `UNKNOWN` (0 points, conservative treatment).
+- **Ranking**: Sorted by composite match score descending. Hospitals with missing coordinates or zero score are excluded.
+
+### 2. Persistent Admission Requests & Single Hospital Assignment
+- **State Machine**: Requests transition through `PENDING` -> `ACCEPTED`, `DECLINED`, `EXPIRED`, or `CANCELLED`.
+- **Concurrency Control**: Exclusive row-level locking on the `Emergency` record (`with_for_update()`) ensures that when multiple hospitals accept nearly simultaneously:
+  1. The winning transaction commits acceptance and updates emergency status to `HOSPITAL_CONFIRMED`.
+  2. All other pending requests for the emergency are automatically set to `CANCELLED`.
+  3. The competing transaction unblocks, identifies that the emergency has already been confirmed, and returns `409 Conflict`.
+
+### 3. Socket.IO Real-Time Notifications
+- ASGI mounted directly on FastAPI without separate microservices.
+- Handshake authenticated via Bearer JWT token in auth payload or HTTP headers.
+- **Room Authorization**:
+  - `hospital:{hospital_id}`: Hospital staff assigned to that hospital ID.
+  - `ambulance:{ambulance_id}`: Crew members assigned to that ambulance ID.
+  - `emergency:{emergency_id}`: Authorized assigned crew or target hospital staff.
+  - `admin`: System administrators.
+- **Event Types**:
+  - `hospital_request.created`
+  - `hospital_request.accepted`
+  - `hospital_request.declined`
+  - `hospital_request.expired`
+  - `hospital.assigned`
+  - `emergency.status.updated`
+- **Envelope Format**:
+  ```json
+  {
+    "event_id": "uuid",
+    "event_type": "hospital.assigned",
+    "occurred_at": "2026-10-10T00:00:00Z",
+    "resource_id": "emergency_id",
+    "data": { ... }
+  }
+  ```
+- Events are emitted strictly **post-commit**. REST remains the authoritative source of truth.
+
+### 4. Non-Blocking AI Services
+- **ElevenLabs Speech Transcription** (`POST /api/v1/emergencies/{id}/transcription`):
+  - Validates audio format (`audio/mpeg`, `audio/wav`, `audio/ogg`, `audio/mp4`, `audio/webm`, `audio/aac`) and size (max 25 MB).
+  - Calls ElevenLabs asynchronously without blocking dispatch.
+- **Groq Clinical Observation Extraction** (`POST /api/v1/emergencies/{id}/ai/extract`):
+  - Extracts structured clinical observations into a validated Pydantic model (`EmergencyExtractionResult`).
+  - Distinguishes reported observations from verified clinical findings; never fabricates missing vitals.
+- **Groq Handover Summary** (`POST /api/v1/emergencies/{id}/ai/handover-summary`):
+  - Generates concise draft handover summaries from recorded case details.
+  - Explicitly marked as AI-generated and requiring medical review.
+- **Constrained First-Aid Guidance** (`POST /api/v1/emergencies/{id}/ai/first-aid`):
+  - Uses an explicitly maintained, clinically reviewed catalog of first-aid protocols (`find_approved_protocol`).
+  - Constrains LLM generation to approved protocols only, preventing invented medication, dosages, or unvetted procedures.
+
+---
+
+## API Endpoints (Phase 3 Additions)
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/api/v1/emergencies/{id}/match-hospitals` | Ambulance Crew, Admin | Run matching and dispatch requests |
+| GET | `/api/v1/emergencies/{id}/destination` | Authorized Staff | Get confirmed destination hospital |
+| GET | `/api/v1/hospital-requests` | Hospital Staff, Admin | List hospital requests for own hospital |
+| GET | `/api/v1/hospital-requests/{id}` | Hospital Staff, Admin | View request details |
+| POST | `/api/v1/hospital-requests/{id}/accept` | Hospital Staff | Concurrency-safe acceptance |
+| POST | `/api/v1/hospital-requests/{id}/decline` | Hospital Staff | Decline admission request |
+| POST | `/api/v1/emergencies/{id}/transcription` | Ambulance Crew, Hospital, Admin | Transcribe incident audio |
+| POST | `/api/v1/emergencies/{id}/ai/extract` | Ambulance Crew, Hospital, Admin | Structured clinical extraction |
+| POST | `/api/v1/emergencies/{id}/ai/handover-summary` | Ambulance Crew, Hospital, Admin | Generate handover summary draft |
+| POST | `/api/v1/emergencies/{id}/ai/first-aid` | Ambulance Crew, Hospital, Admin | Constrained first-aid guidance |
+
+---
+
+## Configuration Variables
+
+```ini
+# AI & Speech Configuration
+ELEVENLABS_API_KEY=""
+ELEVENLABS_TRANSCRIPTION_MODEL="scribe_v1"
+GROQ_API_KEY=""
+GROQ_MODEL="llama-3.3-70b-versatile"
+AI_REQUEST_TIMEOUT_SECONDS=30.0
+MAX_AUDIO_UPLOAD_BYTES=26214400 # 25 MB
+
+# Hospital Dispatch Configuration
+HOSPITAL_RESPONSE_TIMEOUT_SECONDS=180
+MAX_DISPATCH_HOSPITALS_PER_WAVE=3
 ```
 
 ---
 
-## Authentication and Roles
+## Automated Testing & Quality Checks
+
+Run the automated test suite (runs 100% against an isolated in-memory test database):
+
+```bash
+uv run pytest
+```
+
+Run code formatting and lint checks:
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy app
+```
+
+Export the updated OpenAPI specification:
+
+```bash
+uv run python scripts/export_openapi.py --out openapi.json
+```
+
+---
+
+## Database Migrations
+
+Apply Alembic migrations to PostgreSQL:
+
+```bash
+uv run alembic upgrade head
+```
+
+Migrations:
+- `adbc4e6f26e3`: Initial Phase 2 tables and schemas.
+- `4d621ebca70a`: Phase 3 hospital request response deadlines, cancelled status, and emergency AI metadata.
+
 
 ### Roles
 - `ADMIN`: Full administrative management. Can register hospitals, view system-wide statistics, create and inspect all emergencies.

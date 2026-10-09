@@ -5,23 +5,40 @@ from __future__ import annotations
 import logging
 import math
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.core.auth import get_current_user
+from app.core.socket import (
+    notify_emergency_status_updated,
+    notify_hospital_request_created,
+)
 from app.database import get_db_session
 from app.models.emergency import Emergency
 from app.models.emergency_history import EmergencyHistory
 from app.models.enums import (
     ALLOWED_STATUS_TRANSITIONS,
     EmergencyStatus,
+    HospitalRequestStatus,
     UserRole,
     can_transition,
 )
+from app.models.hospital import Hospital
+from app.models.hospital_request import HospitalRequest
 from app.models.user import User
+from app.schemas.ai import (
+    ExtractionRequest,
+    ExtractionVerificationRequest,
+    FirstAidGuidanceResponse,
+    HandoverConfirmationRequest,
+    HandoverSummaryResponse,
+    ObservationExtractionResponse,
+    TranscriptionResponse,
+)
 from app.schemas.common import PaginatedResponse
 from app.schemas.emergency import (
     EmergencyCreate,
@@ -31,13 +48,28 @@ from app.schemas.emergency import (
     EmergencyResponse,
     EmergencyStatusUpdate,
 )
+from app.schemas.hospital_request import (
+    ConfirmedAssignmentResponse,
+    HospitalMatchCandidateResponse,
+    HospitalMatchResponse,
+    HospitalRequestResponse,
+)
+from app.services.elevenlabs import transcribe_audio_file, validate_audio_file
+from app.services.groq import (
+    extract_observations,
+    generate_first_aid,
+    generate_handover,
+)
+from app.services.hospital_matching import HospitalMatchingService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/emergencies", tags=["Emergencies"])
 
 
-def _check_emergency_access(emergency: Emergency, user: User) -> None:
+async def _check_emergency_access(
+    emergency: Emergency, user: User, session: AsyncSession
+) -> None:
     """Verify that the user has permission to view this emergency incident."""
     if user.role == UserRole.ADMIN:
         return
@@ -53,11 +85,21 @@ def _check_emergency_access(emergency: Emergency, user: User) -> None:
         )
 
     if user.role == UserRole.HOSPITAL_STAFF:
-        if user.hospital_id is not None and emergency.confirmed_hospital_id == user.hospital_id:
-            return
+        if user.hospital_id is not None:
+            # 1. Confirmed destination hospital always has full access
+            if emergency.confirmed_hospital_id == user.hospital_id:
+                return
+            # 2. Candidate hospital with dispatched admission request
+            stmt_req = select(HospitalRequest.id).where(
+                HospitalRequest.emergency_id == emergency.id,
+                HospitalRequest.hospital_id == user.hospital_id,
+            )
+            req_res = await session.execute(stmt_req)
+            if req_res.scalar_one_or_none() is not None:
+                return
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied: This emergency is not confirmed for your hospital.",
+            detail="Access denied: Your hospital is not associated with this emergency case.",
         )
 
     raise HTTPException(
@@ -182,7 +224,17 @@ async def list_emergencies(
             return PaginatedResponse[EmergencyResponse](
                 items=[], total=0, page=page, page_size=page_size, total_pages=0
             )
-        base_query = base_query.where(Emergency.confirmed_hospital_id == current_user.hospital_id)
+        from sqlalchemy import or_
+
+        req_subquery = select(HospitalRequest.emergency_id).where(
+            HospitalRequest.hospital_id == current_user.hospital_id
+        )
+        base_query = base_query.where(
+            or_(
+                Emergency.confirmed_hospital_id == current_user.hospital_id,
+                Emergency.id.in_(req_subquery),
+            )
+        )
     else:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -234,7 +286,7 @@ async def get_emergency(
             detail="Emergency incident not found.",
         )
 
-    _check_emergency_access(emergency, current_user)
+    await _check_emergency_access(emergency, current_user, session)
     return EmergencyResponse.model_validate(emergency)
 
 
@@ -420,7 +472,7 @@ async def get_emergency_history(
             detail="Emergency incident not found.",
         )
 
-    _check_emergency_access(emergency, current_user)
+    await _check_emergency_access(emergency, current_user, session)
 
     hist_stmt = (
         select(EmergencyHistory)
@@ -431,3 +483,567 @@ async def get_emergency_history(
     entries = list(hist_result.scalars().all())
 
     return [EmergencyHistoryResponse.model_validate(h) for h in entries]
+
+
+# ── Phase 3: Hospital Matching & Dispatch ───────────────────────
+
+
+@router.post(
+    "/{emergency_id}/match-hospitals",
+    response_model=HospitalMatchResponse,
+    summary="Trigger rules-based hospital matching and dispatch admission requests",
+)
+async def match_and_dispatch_hospitals(
+    emergency_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> HospitalMatchResponse:
+    """Evaluate and rank eligible registered hospitals using deterministic rules-based matching.
+
+    Creates persistent HospitalRequest records and notifies receiving hospital dashboards via Socket.IO.
+    """
+    stmt = select(Emergency).where(Emergency.id == emergency_id)
+    result = await session.execute(stmt)
+    emergency = result.scalar_one_or_none()
+
+    if emergency is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Emergency incident not found.",
+        )
+
+    _check_emergency_update_permission(emergency, current_user)
+
+    if emergency.confirmed_hospital_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Emergency already has a confirmed destination hospital.",
+        )
+
+    settings = get_settings()
+
+    # Run deterministic matching
+    candidates = await HospitalMatchingService.match_hospitals(
+        session=session,
+        emergency=emergency,
+        max_candidates=settings.HOSPITAL_MATCH_MAX_CANDIDATES,
+        search_radius_km=settings.HOSPITAL_MATCH_SEARCH_RADIUS_KM,
+    )
+
+    now = datetime.now(timezone.utc)
+    deadline = now + timedelta(seconds=settings.HOSPITAL_RESPONSE_TIMEOUT_SECONDS)
+
+    candidate_responses: list[HospitalMatchCandidateResponse] = []
+    created_count = 0
+
+    if not candidates:
+        # No eligible hospitals within radius -> transition to ESCALATION_REQUIRED
+        emergency.status = EmergencyStatus.ESCALATION_REQUIRED
+        emergency.updated_at = now
+
+        hist = EmergencyHistory(
+            emergency_id=emergency.id,
+            actor_user_id=current_user.id,
+            event_type="MATCHING_FAILED",
+            previous_status=emergency.status.value,
+            new_status=EmergencyStatus.ESCALATION_REQUIRED.value,
+            details={"reason": "No eligible registered hospitals found within search radius"},
+        )
+        session.add(hist)
+        await session.commit()
+
+        await notify_emergency_status_updated(
+            emergency_id=emergency.id,
+            new_status=EmergencyStatus.ESCALATION_REQUIRED.value,
+            ambulance_id=emergency.assigned_ambulance_id,
+        )
+
+        return HospitalMatchResponse(
+            emergency_id=emergency.id,
+            candidates=[],
+            requests_created=0,
+        )
+
+    # Eligible hospitals found -> transition to ACCEPTANCE_PENDING
+    old_status = emergency.status
+    emergency.status = EmergencyStatus.ACCEPTANCE_PENDING
+    emergency.updated_at = now
+
+    hist_dispatch = EmergencyHistory(
+        emergency_id=emergency.id,
+        actor_user_id=current_user.id,
+        event_type="DISPATCH_REQUESTS_SENT",
+        previous_status=old_status.value,
+        new_status=EmergencyStatus.ACCEPTANCE_PENDING.value,
+        details={"candidate_count": len(candidates)},
+    )
+    session.add(hist_dispatch)
+
+    # Persist durable hospital request records
+    created_requests: list[HospitalRequest] = []
+    for cand in candidates:
+        candidate_responses.append(
+            HospitalMatchCandidateResponse(
+                hospital_id=cand.hospital_id,
+                hospital_name=cand.hospital_name,
+                distance_km=cand.distance_km,
+                composite_score=cand.composite_score,
+                capability_score=cand.capability_score,
+                availability_score=cand.availability_score,
+                proximity_score=cand.proximity_score,
+                matched_capabilities=cand.matched_capabilities,
+                availability_status=cand.availability_status,
+                explanation=cand.explanation,
+            )
+        )
+
+        # Check if a pending or accepted request already exists for this hospital
+        chk_stmt = select(HospitalRequest).where(
+            HospitalRequest.emergency_id == emergency.id,
+            HospitalRequest.hospital_id == cand.hospital_id,
+            HospitalRequest.status.in_(
+                [
+                    HospitalRequestStatus.PENDING,
+                    HospitalRequestStatus.ACCEPTED,
+                ]
+            ),
+        )
+        existing = (await session.execute(chk_stmt)).scalar_one_or_none()
+
+        if existing is None:
+            new_req = HospitalRequest(
+                emergency_id=emergency.id,
+                hospital_id=cand.hospital_id,
+                status=HospitalRequestStatus.PENDING,
+                response_deadline=deadline,
+            )
+            session.add(new_req)
+            created_requests.append(new_req)
+            created_count += 1
+
+    await session.commit()
+
+    # Emit Socket.IO events after commit
+    for req in created_requests:
+        await notify_hospital_request_created(
+            hospital_id=req.hospital_id,
+            request_id=req.id,
+            emergency_id=emergency.id,
+            incident_type=emergency.incident_type,
+            response_deadline=deadline.isoformat(),
+        )
+
+    await notify_emergency_status_updated(
+        emergency_id=emergency.id,
+        new_status=EmergencyStatus.ACCEPTANCE_PENDING.value,
+        ambulance_id=emergency.assigned_ambulance_id,
+    )
+
+    logger.info(
+        "Hospital matching completed for %s: %d candidates, %d requests dispatched",
+        emergency.id,
+        len(candidates),
+        created_count,
+    )
+
+    return HospitalMatchResponse(
+        emergency_id=emergency.id,
+        candidates=candidate_responses,
+        requests_created=created_count,
+    )
+
+
+@router.get(
+    "/{emergency_id}/requests",
+    response_model=list[HospitalRequestResponse],
+    summary="List admission requests dispatched for an emergency",
+)
+async def get_emergency_requests(
+    emergency_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> list[HospitalRequestResponse]:
+    """Retrieve all hospital requests generated for this emergency incident."""
+    stmt = select(Emergency).where(Emergency.id == emergency_id)
+    emergency = (await session.execute(stmt)).scalar_one_or_none()
+
+    if emergency is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Emergency incident not found.",
+        )
+
+    await _check_emergency_access(emergency, current_user, session)
+
+    req_stmt = (
+        select(HospitalRequest)
+        .where(HospitalRequest.emergency_id == emergency_id)
+        .order_by(HospitalRequest.created_at.desc())
+    )
+    requests = list((await session.execute(req_stmt)).scalars().all())
+
+    return [HospitalRequestResponse.model_validate(r) for r in requests]
+
+
+@router.get(
+    "/{emergency_id}/assignment",
+    response_model=ConfirmedAssignmentResponse,
+    summary="Retrieve confirmed hospital assignment for an emergency",
+)
+@router.get(
+    "/{emergency_id}/destination",
+    response_model=ConfirmedAssignmentResponse,
+    summary="Retrieve confirmed hospital destination for an emergency",
+    include_in_schema=True,
+)
+async def get_emergency_assignment(
+    emergency_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> ConfirmedAssignmentResponse:
+    """Retrieve the authoritative confirmed destination hospital."""
+    stmt = select(Emergency).where(Emergency.id == emergency_id)
+    emergency = (await session.execute(stmt)).scalar_one_or_none()
+
+    if emergency is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Emergency incident not found.",
+        )
+
+    await _check_emergency_access(emergency, current_user, session)
+
+    hospital_name: str | None = None
+    if emergency.confirmed_hospital_id:
+        h_stmt = select(Hospital.name).where(Hospital.id == emergency.confirmed_hospital_id)
+        hospital_name = (await session.execute(h_stmt)).scalar_one_or_none()
+
+    return ConfirmedAssignmentResponse(
+        emergency_id=emergency.id,
+        confirmed_hospital_id=emergency.confirmed_hospital_id,
+        confirmed_hospital_name=hospital_name,
+        status=emergency.status.value,
+    )
+
+
+# ── Phase 3: AI Speech Transcription & Clinical Extraction ───────
+
+
+@router.post(
+    "/{emergency_id}/transcription",
+    response_model=TranscriptionResponse,
+    summary="Transcribe emergency radio/voice audio with ElevenLabs",
+)
+async def transcribe_emergency_audio(
+    emergency_id: uuid.UUID,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> TranscriptionResponse:
+    """Upload and transcribe scene audio recording. Non-blocking to dispatch."""
+    stmt = select(Emergency).where(Emergency.id == emergency_id)
+    emergency = (await session.execute(stmt)).scalar_one_or_none()
+
+    if emergency is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Emergency incident not found.",
+        )
+
+    _check_emergency_update_permission(emergency, current_user)
+
+    audio_bytes = await file.read()
+    filename = file.filename or "recording.wav"
+    content_type = file.content_type or "audio/wav"
+
+    try:
+        validate_audio_file(filename, content_type, len(audio_bytes))
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from None
+
+    # Transcribe via ElevenLabs service
+    result = await transcribe_audio_file(audio_bytes, filename, content_type)
+
+    # Persist transcript metadata on emergency
+    emergency.transcription = {
+        "transcription_id": result["transcription_id"],
+        "transcript": result["transcript"],
+        "language": result["language"],
+        "status": result["processing_status"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    emergency.updated_at = datetime.now(timezone.utc)
+
+    history_entry = EmergencyHistory(
+        emergency_id=emergency.id,
+        actor_user_id=current_user.id,
+        event_type="AUDIO_TRANSCRIBED",
+        details={
+            "transcription_id": result["transcription_id"],
+            "status": result["processing_status"],
+        },
+    )
+    session.add(history_entry)
+
+    await session.commit()
+
+    return TranscriptionResponse(
+        transcription_id=result["transcription_id"],
+        emergency_id=emergency.id,
+        transcript=result["transcript"],
+        language=result["language"],
+        processing_status=result["processing_status"],
+    )
+
+
+@router.post(
+    "/{emergency_id}/ai/extract",
+    response_model=ObservationExtractionResponse,
+    summary="Extract structured clinical observations with Groq AI",
+)
+async def extract_emergency_observations(
+    emergency_id: uuid.UUID,
+    payload: ExtractionRequest | None = None,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> ObservationExtractionResponse:
+    """Convert raw text or scene description into validated structured observations."""
+    stmt = select(Emergency).where(Emergency.id == emergency_id)
+    emergency = (await session.execute(stmt)).scalar_one_or_none()
+
+    if emergency is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Emergency incident not found.",
+        )
+
+    await _check_emergency_access(emergency, current_user, session)
+
+    # Determine input text source
+    source_text: str = ""
+    if payload and payload.text:
+        source_text = payload.text
+    elif emergency.transcription and emergency.transcription.get("transcript"):
+        source_text = emergency.transcription["transcript"]
+    elif emergency.incident_description:
+        source_text = emergency.incident_description
+    else:
+        source_text = f"Incident: {emergency.incident_type}"
+
+    extraction = await extract_observations(source_text)
+
+    # Store extracted observations for review
+    if emergency.ai_extractions is None:
+        emergency.ai_extractions = []
+    emergency.ai_extractions.append(extraction.model_dump())
+    emergency.updated_at = datetime.now(timezone.utc)
+
+    await session.commit()
+
+    return ObservationExtractionResponse.model_validate(extraction.model_dump())
+
+
+@router.post(
+    "/{emergency_id}/ai/handover-summary",
+    response_model=HandoverSummaryResponse,
+    summary="Generate clinical handover summary draft with Groq AI",
+)
+async def generate_emergency_handover_summary(
+    emergency_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> HandoverSummaryResponse:
+    """Generate concise clinical handover draft for receiving hospital staff."""
+    stmt = select(Emergency).where(Emergency.id == emergency_id)
+    emergency = (await session.execute(stmt)).scalar_one_or_none()
+
+    if emergency is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Emergency incident not found.",
+        )
+
+    await _check_emergency_access(emergency, current_user, session)
+
+    context = {
+        "incident_type": emergency.incident_type,
+        "incident_description": emergency.incident_description,
+        "patient_info": emergency.patient_info,
+        "status": emergency.status.value,
+        "incident_latitude": emergency.incident_latitude,
+        "incident_longitude": emergency.incident_longitude,
+    }
+
+    handover = await generate_handover(context)
+
+    emergency.handover_summary = handover.model_dump()
+    emergency.updated_at = datetime.now(timezone.utc)
+
+    await session.commit()
+
+    return HandoverSummaryResponse.model_validate(handover.model_dump())
+
+
+@router.post(
+    "/{emergency_id}/ai/first-aid",
+    response_model=FirstAidGuidanceResponse,
+    summary="Retrieve constrained first-aid supportive guidance from approved protocols",
+)
+async def get_emergency_first_aid_guidance(
+    emergency_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> FirstAidGuidanceResponse:
+    """Get supportive scene first-aid guidance constrained strictly by approved protocols."""
+    stmt = select(Emergency).where(Emergency.id == emergency_id)
+    emergency = (await session.execute(stmt)).scalar_one_or_none()
+
+    if emergency is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Emergency incident not found.",
+        )
+
+    await _check_emergency_access(emergency, current_user, session)
+
+    guidance = await generate_first_aid(emergency.incident_type)
+    return FirstAidGuidanceResponse.model_validate(guidance.model_dump())
+
+
+@router.post(
+    "/{emergency_id}/ai/verify-extractions",
+    response_model=EmergencyResponse,
+    summary="Review and verify AI-extracted clinical observations by attending crew",
+)
+async def verify_emergency_extractions(
+    emergency_id: uuid.UUID,
+    payload: ExtractionVerificationRequest,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> EmergencyResponse:
+    """Promote AI-extracted observations to verified patient record after crew review."""
+    stmt = select(Emergency).where(Emergency.id == emergency_id)
+    emergency = (await session.execute(stmt)).scalar_one_or_none()
+
+    if emergency is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Emergency incident not found.",
+        )
+
+    _check_emergency_update_permission(emergency, current_user)
+
+    now = datetime.now(timezone.utc)
+    updated_info = dict(emergency.patient_info or {})
+    updated_info.update(payload.verified_patient_info)
+    if payload.crew_notes:
+        updated_info["crew_review_notes"] = payload.crew_notes
+    updated_info["observations_verified_by_crew"] = True
+    updated_info["verified_at"] = now.isoformat()
+    emergency.patient_info = updated_info
+
+    # Mark extractions as reviewed
+    if emergency.ai_extractions:
+        for ext in emergency.ai_extractions:
+            ext["reviewed_by_crew"] = True
+            ext["reviewed_at"] = now.isoformat()
+
+    emergency.updated_at = now
+
+    hist = EmergencyHistory(
+        emergency_id=emergency.id,
+        actor_user_id=current_user.id,
+        event_type="OBSERVATIONS_VERIFIED",
+        details={
+            "verified_fields": list(payload.verified_patient_info.keys()),
+            "crew_notes": payload.crew_notes,
+        },
+    )
+    session.add(hist)
+
+    await session.commit()
+    await session.refresh(emergency)
+
+    logger.info("Crew verified AI extractions for emergency: %s", emergency.id)
+    return EmergencyResponse.model_validate(emergency)
+
+
+@router.post(
+    "/{emergency_id}/handover/confirm",
+    response_model=HandoverSummaryResponse,
+    summary="Confirm and approve clinical handover summary by attending crew",
+)
+async def confirm_handover_summary(
+    emergency_id: uuid.UUID,
+    payload: HandoverConfirmationRequest,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> HandoverSummaryResponse:
+    """Attending crew reviews, edits, and approves clinical handover summary for receiving hospital."""
+    stmt = select(Emergency).where(Emergency.id == emergency_id)
+    emergency = (await session.execute(stmt)).scalar_one_or_none()
+
+    if emergency is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Emergency incident not found.",
+        )
+
+    _check_emergency_update_permission(emergency, current_user)
+
+    if not emergency.handover_summary:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No handover summary exists to confirm. Generate handover draft first.",
+        )
+
+    now = datetime.now(timezone.utc)
+    summary_data = dict(emergency.handover_summary)
+    summary_data["review_status"] = (
+        "CONFIRMED_BY_CREW" if payload.approved else "REJECTED_BY_CREW"
+    )
+    summary_data["confirmed_at"] = now.isoformat()
+    summary_data["confirmed_by_id"] = str(current_user.id)
+    if payload.crew_notes:
+        summary_data["crew_notes"] = payload.crew_notes
+
+    emergency.handover_summary = summary_data
+    emergency.updated_at = now
+
+    hist = EmergencyHistory(
+        emergency_id=emergency.id,
+        actor_user_id=current_user.id,
+        event_type="HANDOVER_SUMMARY_CONFIRMED",
+        details={
+            "approved": payload.approved,
+            "crew_notes": payload.crew_notes,
+        },
+    )
+    session.add(hist)
+
+    await session.commit()
+
+    # Emit real-time notification to confirmed hospital room if hospital is confirmed
+    if emergency.confirmed_hospital_id:
+        from app.core.socket import create_event_envelope, sio
+
+        envelope = create_event_envelope(
+            event_type="emergency.handover_confirmed",
+            resource_id=str(emergency.id),
+            data={
+                "emergency_id": str(emergency.id),
+                "review_status": summary_data["review_status"],
+                "handover_summary": summary_data,
+            },
+        )
+        await sio.emit(
+            "emergency.handover_confirmed",
+            envelope,
+            room=f"hospital:{emergency.confirmed_hospital_id}",
+        )
+
+    return HandoverSummaryResponse.model_validate(summary_data)
+

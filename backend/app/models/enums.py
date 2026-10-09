@@ -33,6 +33,7 @@ class HospitalRequestStatus(str, Enum):
     ACCEPTED = "ACCEPTED"
     DECLINED = "DECLINED"
     EXPIRED = "EXPIRED"
+    CANCELLED = "CANCELLED"
 
 
 class EmergencyStatus(str, Enum):
@@ -55,10 +56,13 @@ class EmergencyStatus(str, Enum):
 ALLOWED_STATUS_TRANSITIONS: dict[EmergencyStatus, set[EmergencyStatus]] = {
     EmergencyStatus.CREATED: {
         EmergencyStatus.ASSESSMENT_IN_PROGRESS,
+        EmergencyStatus.SEARCHING_HOSPITAL,
+        EmergencyStatus.ACCEPTANCE_PENDING,
         EmergencyStatus.CANCELLED,
     },
     EmergencyStatus.ASSESSMENT_IN_PROGRESS: {
         EmergencyStatus.SEARCHING_HOSPITAL,
+        EmergencyStatus.ACCEPTANCE_PENDING,
         EmergencyStatus.ESCALATION_REQUIRED,
         EmergencyStatus.CANCELLED,
     },
@@ -92,6 +96,7 @@ ALLOWED_STATUS_TRANSITIONS: dict[EmergencyStatus, set[EmergencyStatus]] = {
     EmergencyStatus.CANCELLED: set(),
     EmergencyStatus.ESCALATION_REQUIRED: {
         EmergencyStatus.SEARCHING_HOSPITAL,
+        EmergencyStatus.ACCEPTANCE_PENDING,
         EmergencyStatus.HOSPITAL_CONFIRMED,
         EmergencyStatus.TRANSPORTING,
         EmergencyStatus.CANCELLED,
