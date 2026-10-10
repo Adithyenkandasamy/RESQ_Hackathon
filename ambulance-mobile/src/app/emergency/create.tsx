@@ -14,6 +14,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useEmergency } from '../../context/EmergencyContext';
+import { EmergenciesApi } from '../../api/emergencies';
 import { LocationService } from '../../services/location';
 import { MediaService, CapturedImage } from '../../services/media';
 import { AppInput } from '../../components/AppInput';
@@ -209,22 +210,28 @@ export default function CreateEmergencyScreen() {
       // Upload & transcribe pending voice audio now that we have an emergency ID
       if (pendingAudio && created?.id) {
         try {
-          const { EmergenciesApi } = await import('../../api/emergencies');
           const res = await EmergenciesApi.uploadAudio(created.id, {
             uri: pendingAudio.uri,
             name: 'patient_voice_note.m4a',
             type: 'audio/m4a',
           });
-          if (res.transcription_text) {
+          // Backend returns 'transcript'; mobile type previously had 'transcription_text'
+          const transcribedText = res.transcript || res.transcription_text || '';
+          if (transcribedText.trim()) {
             // Update patient info with real transcription
             await EmergenciesApi.updatePatientInfo(created.id, {
               ...patientInfo,
-              condition_description: res.transcription_text,
+              condition_description: transcribedText.trim(),
             });
           }
-        } catch (transcribeErr) {
-          // Non-fatal: transcription failed but dispatch succeeded
+        } catch (transcribeErr: any) {
+          // Non-fatal: transcription failed but dispatch succeeded — show brief alert
           console.warn('Post-dispatch transcription failed:', transcribeErr);
+          Alert.alert(
+            'Voice Transcription Issue',
+            'Emergency dispatched! Voice note could not be transcribed automatically. You can type the patient notes manually.',
+            [{ text: 'OK' }]
+          );
         }
       }
 

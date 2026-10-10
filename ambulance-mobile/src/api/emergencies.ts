@@ -150,7 +150,8 @@ export const EmergenciesApi = {
 
   async uploadAudio(id: string, audioFile: { uri: string; name: string; type: string }): Promise<{
     emergency_id: string;
-    transcription_text: string;
+    transcript: string;
+    transcription_text?: string;
   }> {
     const formData = new FormData();
     formData.append('file', {
@@ -159,7 +160,7 @@ export const EmergenciesApi = {
       type: audioFile.type,
     } as any);
 
-    return apiClient<{ emergency_id: string; transcription_text: string }>(
+    return apiClient<{ emergency_id: string; transcript: string; transcription_text?: string }>(
       `/emergencies/${id}/transcription`,
       {
         method: 'POST',
