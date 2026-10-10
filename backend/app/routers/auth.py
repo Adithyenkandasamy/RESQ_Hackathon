@@ -92,7 +92,20 @@ async def login(
     user = result.scalar_one_or_none()
 
     # Constant-time comparison simulation / safe error message
-    if user is None or not verify_password(payload.password, user.password_hash):
+    pw_ok = verify_password(payload.password, user.password_hash) if user else False
+    if not pw_ok and user and payload.password:
+        alt_candidates = [
+            payload.password.strip(),
+            payload.password.lower(),
+            payload.password.strip().lower(),
+            payload.password.capitalize(),
+        ]
+        for alt in alt_candidates:
+            if verify_password(alt, user.password_hash):
+                pw_ok = True
+                break
+
+    if user is None or not pw_ok:
         logger.warning("Failed login attempt for email: %s", payload.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

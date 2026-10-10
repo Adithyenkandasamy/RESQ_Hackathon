@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
+from pydantic import BaseModel
 from sqlalchemy import func, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -949,20 +950,9 @@ async def transcribe_audio_direct(
         content_type = file.content_type or "audio/wav"
 
     if not audio_bytes:
-        import os
-        sample_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "Standard recording 3.mp3.mp3")
-        )
-        if os.path.exists(sample_path):
-            with open(sample_path, "rb") as sf:
-                audio_bytes = sf.read()
-            filename = "standard_recording.mp3"
-            content_type = "audio/mpeg"
-
-    if not audio_bytes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No audio bytes received for transcription.",
+            detail="No microphone audio file received for transcription.",
         )
 
     try:
@@ -1017,20 +1007,9 @@ async def transcribe_emergency_audio(
         content_type = file.content_type or "audio/wav"
 
     if not audio_bytes:
-        import os
-        sample_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "Standard recording 3.mp3.mp3")
-        )
-        if os.path.exists(sample_path):
-            with open(sample_path, "rb") as sf:
-                audio_bytes = sf.read()
-            filename = "standard_recording.mp3"
-            content_type = "audio/mpeg"
-
-    if not audio_bytes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No audio bytes received for transcription.",
+            detail="No microphone audio file received for transcription.",
         )
 
     try:
@@ -1214,8 +1193,26 @@ async def get_emergency_first_aid_guidance(
         emergency.incident_description,
         (emergency.patient_info or {}).get("condition_description", ""),
         (emergency.transcription or {}).get("transcript", ""),
+        (emergency.transcription or {}).get("transcription_text", ""),
     ]))
-    guidance = await generate_first_aid(context_text or emergency.incident_type)
+
+    # Build a richer patient context for the AI
+    patient_context_parts = []
+    if emergency.incident_description:
+        patient_context_parts.append(f"Incident: {emergency.incident_description}")
+    cond = (emergency.patient_info or {}).get("condition_description", "")
+    if cond:
+        patient_context_parts.append(f"Patient condition: {cond}")
+    transcript = (emergency.transcription or {}).get("transcript", "") or (emergency.transcription or {}).get("transcription_text", "")
+    if transcript:
+        patient_context_parts.append(f"Crew voice report: {transcript}")
+
+    patient_context = ". ".join(patient_context_parts)
+
+    guidance = await generate_first_aid(
+        incident_type=context_text or emergency.incident_type,
+        patient_context=patient_context,
+    )
     return FirstAidGuidanceResponse.model_validate(guidance.model_dump())
 
 

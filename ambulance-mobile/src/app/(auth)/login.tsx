@@ -28,14 +28,16 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     setErrorMessage(null);
-    if (!email.trim() || !password.trim()) {
+    const cleanEmail = email.trim();
+    const cleanPassword = password.trim();
+    if (!cleanEmail || !cleanPassword) {
       setErrorMessage('Please enter both email and password.');
       return;
     }
 
     setLoading(true);
     try {
-      await login({ email: email.trim(), password });
+      await login({ email: cleanEmail, password: cleanPassword });
       router.replace('/(tabs)/home');
     } catch (err: any) {
       setErrorMessage(err.message || 'Login failed. Please check credentials.');
@@ -78,6 +80,7 @@ export default function LoginScreen() {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
+            autoCorrect={false}
           />
 
           <AppInput
@@ -86,6 +89,8 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             isPassword
+            autoCapitalize="none"
+            autoCorrect={false}
           />
 
           <AppButton

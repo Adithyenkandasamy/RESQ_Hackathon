@@ -233,26 +233,87 @@ async def generate_handover(emergency_context: dict[str, Any]) -> HandoverSummar
         )
 
 
-async def generate_first_aid(incident_type: str) -> FirstAidGuidanceResult:
-    """Generate supportive first-aid guidance constrained strictly by approved protocols."""
+async def generate_first_aid(incident_type: str, patient_context: str = "") -> FirstAidGuidanceResult:
+    """Generate supportive first-aid guidance constrained by approved protocols but specific to the patient."""
     settings = get_settings()
-    protocol = find_approved_protocol(incident_type)
+    full_context = f"{incident_type} {patient_context}".strip()
+    protocol = find_approved_protocol(full_context)
 
     if protocol is None:
-        return FirstAidGuidanceResult(
-            protocol_id=None,
-            protocol_version=None,
-            protocol_title=None,
-            guidance_steps=[
-                "No pre-approved clinical first-aid protocol is indexed for this specific incident type.",
-                "Ensure bystander safety, do not move the patient unless immediate physical danger is present.",
-                "Keep the patient calm and wait for arriving Emergency Medical Services (EMS).",
-            ],
-            critical_precautions=[
-                "Do not administer food, water, or medication without direct medical command authorization.",
-            ],
-            model_used="rule-based-catalog",
-        )
+        # No matching protocol — still ask Groq for general scene safety guidance
+        client = _get_groq_client()
+        if not client:
+            return FirstAidGuidanceResult(
+                protocol_id=None,
+                protocol_version=None,
+                protocol_title="General Emergency Scene Safety",
+                guidance_steps=[
+                    "Ensure bystander and crew safety before approaching the patient.",
+                    "Keep the patient calm, still, and warm.",
+                    "Do not move the patient unless immediate physical danger is present.",
+                    "Monitor breathing and consciousness continuously.",
+                    "Wait for arriving Emergency Medical Services (EMS) and relay key observations.",
+                ],
+                critical_precautions=[
+                    "Do not administer food, water, or medication without direct medical command authorization.",
+                    "Do not leave the patient unattended.",
+                ],
+                model_used="rule-based-catalog",
+            )
+
+        try:
+            response = await client.chat.completions.create(
+                model=settings.GROQ_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a pre-hospital emergency care assistant for ambulance crew. "
+                            "Generate specific, actionable scene first-aid steps for the EXACT emergency described. "
+                            "Be practical and direct. Tailor advice to the specific patient situation described. "
+                            "Do NOT prescribe medications or diagnose. "
+                            "Output JSON: {\"protocol_title\": \"...\", \"guidance_steps\": [\"step 1\", ...], \"critical_precautions\": [\"precaution 1\", ...]}"
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Emergency situation: {full_context}\n\nProvide specific step-by-step first aid guidance for this patient.",
+                    },
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3,
+            )
+            content = response.choices[0].message.content or "{}"
+            parsed = json.loads(content)
+            return FirstAidGuidanceResult(
+                protocol_id="AI-GENERATED",
+                protocol_version="dynamic",
+                protocol_title=parsed.get("protocol_title", "Scene Emergency Guidance"),
+                guidance_steps=parsed.get("guidance_steps", [
+                    "Ensure scene safety and approach safely.",
+                    "Assess the patient's responsiveness and breathing.",
+                    "Call for backup if needed and prepare for transport.",
+                ]),
+                critical_precautions=parsed.get("critical_precautions", [
+                    "Do not administer any medication without medical command authorization.",
+                ]),
+                model_used=settings.GROQ_MODEL,
+            )
+        except Exception as exc:
+            logger.exception("Groq general guidance failed: %s", exc)
+            return FirstAidGuidanceResult(
+                protocol_id=None,
+                protocol_version=None,
+                protocol_title="General Emergency Scene Safety",
+                guidance_steps=[
+                    "Ensure bystander and crew safety before approaching the patient.",
+                    "Keep the patient calm, still, and warm.",
+                    "Monitor breathing and consciousness continuously.",
+                    "Wait for EMS and relay key observations.",
+                ],
+                critical_precautions=["Do not administer food, water, or medication without direct medical command authorization."],
+                model_used="fallback-on-error",
+            )
 
     client = _get_groq_client()
     if not client:
@@ -266,17 +327,19 @@ async def generate_first_aid(incident_type: str) -> FirstAidGuidanceResult:
         )
 
     system_prompt = (
-        f"You are a first-aid assistant. You MUST present the following approved protocol steps clearly. "
-        f"APPROVED MATERIAL (DO NOT DEVIATE OR ADD OUTSIDE INSTRUCTIONS):\n{protocol['approved_material']}\n\n"
-        f"PRECAUTIONS:\n{json.dumps(protocol['precautions'])}\n\n"
+        "You are a pre-hospital emergency care assistant for ambulance crew at the scene. "
+        "Your job is to give SPECIFIC, PRACTICAL first-aid steps for THIS exact patient and situation. "
+        "Use the approved protocol below as your clinical baseline but tailor the steps to the actual patient details. "
+        "Be concise, numbered, and actionable. Address the specific injuries/symptoms mentioned. \n\n"
+        f"APPROVED CLINICAL PROTOCOL: {protocol['title']}\n"
+        f"PROTOCOL BASELINE STEPS:\n{protocol['approved_material']}\n\n"
+        f"MANDATORY PRECAUTIONS:\n{json.dumps(protocol['precautions'])}\n\n"
         "RULES:\n"
-        "1. Do NOT prescribe medications, dosages, or treatments not in the approved material.\n"
-        "2. Do NOT diagnose.\n"
-        "3. Output a JSON object matching:\n"
-        "{\n"
-        '  "guidance_steps": ["step 1", "step 2", ...],\n'
-        '  "critical_precautions": ["precaution 1", ...]\n'
-        "}"
+        "1. Do NOT prescribe medications or dosages not in the protocol.\n"
+        "2. Do NOT diagnose — describe observations and actions only.\n"
+        "3. Tailor steps to the specific patient context described by the crew.\n"
+        "4. Keep steps short (1-2 sentences each), numbered, and immediately actionable.\n"
+        "5. Output JSON: {\"guidance_steps\": [\"1. Step...\", \"2. Step...\", ...], \"critical_precautions\": [\"...\", ...]}"
     )
 
     try:
@@ -284,10 +347,16 @@ async def generate_first_aid(incident_type: str) -> FirstAidGuidanceResult:
             model=settings.GROQ_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Summarize approved guidance for: {incident_type}"},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Patient & Incident Details:\n{full_context}\n\n"
+                        "Provide specific first-aid steps tailored to this exact patient situation."
+                    ),
+                },
             ],
             response_format={"type": "json_object"},
-            temperature=0.0,
+            temperature=0.4,
         )
         content = response.choices[0].message.content or "{}"
         parsed = json.loads(content)
@@ -309,3 +378,4 @@ async def generate_first_aid(incident_type: str) -> FirstAidGuidanceResult:
             critical_precautions=protocol["precautions"],
             model_used="fallback-on-error",
         )
+

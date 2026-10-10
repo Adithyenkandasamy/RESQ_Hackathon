@@ -1,4 +1,5 @@
-import { apiClient } from './client';
+import { apiClient, API_V1_URL, ApiError } from './client';
+import { SecureStorageService } from '../services/secureStorage';
 import {
   Emergency,
   EmergencyCreatePayload,
@@ -9,6 +10,51 @@ import {
 } from '../types/emergency';
 import { Hospital } from '../types/hospital';
 import { PaginatedResponse } from '../types/api';
+
+/**
+ * Upload an audio file using XMLHttpRequest — React Native Android's XHR
+ * natively supports file:// URIs in FormData, avoiding the OkHttp
+ * 'Unsupported FormDataPart implementation' error that fetch() triggers.
+ */
+async function uploadAudioFile(
+  endpoint: string,
+  audioFile: { uri: string; name: string; type: string },
+): Promise<any> {
+  const token = await SecureStorageService.getToken();
+  const url = endpoint.startsWith('http') ? endpoint : `${API_V1_URL}${endpoint}`;
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch {
+          resolve({ transcript: '', transcription_text: '' });
+        }
+      } else {
+        let msg = `Request failed with status ${xhr.status}`;
+        try {
+          const data = JSON.parse(xhr.responseText);
+          msg = data?.detail || data?.message || msg;
+        } catch { /* ignore */ }
+        reject(new ApiError(msg, xhr.status));
+      }
+    };
+    xhr.onerror = () => reject(new ApiError('Network error uploading audio', 0));
+    xhr.ontimeout = () => reject(new ApiError('Audio upload timed out', 408));
+    xhr.timeout = 60000;
+
+    const formData = new FormData();
+    // React Native XHR accepts { uri, name, type } objects natively
+    formData.append('file', { uri: audioFile.uri, name: audioFile.name, type: audioFile.type } as any);
+    xhr.send(formData);
+  });
+}
 
 function normalizeEmergency(data: any): Emergency {
   const lat = data.incident_latitude ?? data.latitude ?? null;
@@ -153,44 +199,35 @@ export const EmergenciesApi = {
     transcript: string;
     transcription_text?: string;
   }> {
-    const formData = new FormData();
-    if (audioFile?.uri && (audioFile.uri.startsWith('file:') || audioFile.uri.startsWith('content:'))) {
-      formData.append('file', {
-        uri: audioFile.uri,
-        name: audioFile.name || 'patient_voice_note.m4a',
-        type: audioFile.type || 'audio/m4a',
-      } as any);
+    if (!audioFile?.uri || (!audioFile.uri.startsWith('file:') && !audioFile.uri.startsWith('content:'))) {
+      // No valid local file — just POST empty to trigger any server-side default handling
+      return apiClient<{ emergency_id: string; transcript: string; transcription_text?: string }>(
+        `/emergencies/${id}/transcription`,
+        { method: 'POST' }
+      );
     }
+    // Use XHR to avoid Android OkHttp FormData rejection
+    return uploadAudioFile(`/emergencies/${id}/transcription`, {
+      uri: audioFile.uri,
+      name: audioFile.name || 'patient_voice_note.m4a',
+      type: audioFile.type || 'audio/m4a',
+    });
+  },
 
-    return apiClient<{ emergency_id: string; transcript: string; transcription_text?: string }>(
-      `/emergencies/${id}/transcription`,
-      {
-        method: 'POST',
-        body: formData,
-        isMultipart: true,
-      }
-    );
-  async directTranscribe(audioFile?: { uri: string; name: string; type: string }): Promise<{
+  directTranscribe: async function(audioFile?: { uri: string; name: string; type: string }): Promise<{
     transcript: string;
     transcription_text?: string;
   }> {
-    const formData = new FormData();
-    if (audioFile?.uri && (audioFile.uri.startsWith('file:') || audioFile.uri.startsWith('content:'))) {
-      formData.append('file', {
-        uri: audioFile.uri,
-        name: audioFile.name || 'patient_voice_note.m4a',
-        type: audioFile.type || 'audio/m4a',
-      } as any);
+    if (!audioFile?.uri || (!audioFile.uri.startsWith('file:') && !audioFile.uri.startsWith('content:'))) {
+      // No audio file — return empty so UI shows the tag fallback
+      return { transcript: '', transcription_text: '' };
     }
-
-    return apiClient<{ transcript: string; transcription_text?: string }>(
-      '/emergencies/transcribe-audio',
-      {
-        method: 'POST',
-        body: formData,
-        isMultipart: true,
-      }
-    );
+    // Use XHR to avoid Android OkHttp FormData rejection
+    return uploadAudioFile('/emergencies/transcribe-audio', {
+      uri: audioFile.uri,
+      name: audioFile.name || 'patient_voice_note.m4a',
+      type: audioFile.type || 'audio/m4a',
+    });
   },
 
   async extractEntities(id: string, transcriptionText: string): Promise<{

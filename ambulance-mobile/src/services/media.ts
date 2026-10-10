@@ -3,36 +3,39 @@ import * as ImagePicker from 'expo-image-picker';
 
 // Safely obtain Audio module without crashing if ExponentAV native module is missing in Expo Go.
 // Cache the result so we only try once.
-let _audioModule: any = undefined; // undefined = not tried, null = unavailable
+// Try expo-audio first (modern Expo Go SDK 52/53 module), fallback to expo-av
+let _expoAudio: any = undefined;
+function getExpoAudio() {
+  if (_expoAudio !== undefined) return _expoAudio;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const ea = require('expo-audio');
+    if (ea && ea.AudioModule) {
+      _expoAudio = ea;
+      return _expoAudio;
+    }
+  } catch (err) {
+    console.warn('expo-audio not available:', err);
+  }
+  _expoAudio = null;
+  return null;
+}
+
+let _audioModule: any = undefined;
 function getAudio() {
   if (_audioModule !== undefined) return _audioModule;
-
-  // In Expo Go SDK 53+, ExponentAV is not compiled into the client.
-  // Probing NativeModules prevents requiring 'expo-av' which triggers an uncatchable
-  // native module lookup error from Expo's module loader.
-  const hasNativeExponentAV = Boolean(
-    (NativeModules && (NativeModules.ExponentAV || (NativeModules as any).ExpoAudio)) ||
-    ((globalThis as any)?.expo?.modules?.ExponentAV)
-  );
-
-  if (!hasNativeExponentAV) {
-    _audioModule = null;
-    return null;
-  }
-
   try {
-    const moduleName = 'expo' + '-av';
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const expoAv = require(moduleName);
+    const expoAv = require('expo-av');
     if (expoAv?.Audio?.requestPermissionsAsync) {
       _audioModule = expoAv.Audio;
-    } else {
-      _audioModule = null;
+      return _audioModule;
     }
-  } catch {
-    _audioModule = null;
+  } catch (err) {
+    console.warn('Could not load expo-av:', err);
   }
-  return _audioModule;
+  _audioModule = null;
+  return null;
 }
 
 export interface CapturedImage {
@@ -123,81 +126,118 @@ export const MediaService = {
   simulatedRecordingStartTime: null as number | null,
 
   async requestMicrophonePermission(): Promise<boolean> {
+    const ea = getExpoAudio();
+    if (ea?.AudioModule?.requestRecordingPermissionsAsync) {
+      try {
+        const res = await ea.AudioModule.requestRecordingPermissionsAsync();
+        if (res?.status === 'granted') return true;
+      } catch (e) {
+        console.warn('expo-audio permission error:', e);
+      }
+    }
+
     const Audio = getAudio();
-    if (!Audio) {
-      // In environments without ExponentAV (like Expo Go SDK 53+), grant mock permission
-      return true;
+    if (Audio?.requestPermissionsAsync) {
+      try {
+        const { status } = await Audio.requestPermissionsAsync();
+        return status === 'granted';
+      } catch (e) {
+        console.warn('expo-av permission error:', e);
+      }
     }
-    try {
-      const { status } = await Audio.requestPermissionsAsync();
-      return status === 'granted';
-    } catch {
-      return false;
-    }
+
+    return false;
   },
 
   async startAudioRecording(): Promise<boolean> {
-    const Audio = getAudio();
-    if (!Audio) {
-      console.warn('Native ExponentAV module not found. Using simulated audio recording.');
-      this.simulatedRecordingStartTime = Date.now();
-      return true;
-    }
-    try {
-      const granted = await this.requestMicrophonePermission();
-      if (!granted) return false;
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets?.HIGH_QUALITY || {}
-      );
-      this.recordingInstance = recording;
-      return true;
-    } catch (e) {
-      console.warn('Failed to start audio recording:', e);
+    const granted = await this.requestMicrophonePermission();
+    if (!granted) {
+      console.warn('Microphone permission not granted.');
       return false;
     }
+
+    // 1. Try expo-audio (native module compiled into Expo Go SDK 52/53)
+    const ea = getExpoAudio();
+    if (ea?.AudioModule?.AudioRecorder) {
+      try {
+        const recorder = new ea.AudioModule.AudioRecorder(
+          ea.RecordingPresets?.HIGH_QUALITY || {}
+        );
+        await recorder.prepareToRecordAsync();
+        recorder.record();
+        this.recordingInstance = { type: 'expo-audio', instance: recorder };
+        return true;
+      } catch (e) {
+        console.warn('expo-audio record error:', e);
+      }
+    }
+
+    // 2. Fallback to expo-av if present
+    const Audio = getAudio();
+    if (Audio?.Recording) {
+      try {
+        if (Audio.setAudioModeAsync) {
+          await Audio.setAudioModeAsync({
+            allowsRecordingIOS: true,
+            playsInSilentModeIOS: true,
+          });
+        }
+        const { recording } = await Audio.Recording.createAsync(
+          Audio.RecordingOptionsPresets?.HIGH_QUALITY || {}
+        );
+        this.recordingInstance = { type: 'expo-av', instance: recording };
+        return true;
+      } catch (e) {
+        console.warn('expo-av record error:', e);
+      }
+    }
+
+    console.warn('No native audio recorder available on this device.');
+    return false;
   },
 
   async stopAudioRecording(): Promise<AudioRecordingResult | null> {
-    const Audio = getAudio();
-    if (!Audio || this.simulatedRecordingStartTime) {
-      const duration = this.simulatedRecordingStartTime
-        ? Date.now() - this.simulatedRecordingStartTime
-        : 3500;
-      this.simulatedRecordingStartTime = null;
-      return {
-        uri: 'https://actions.google.com/sounds/v1/emergency/ambulance_siren_short.ogg',
-        durationMs: Math.max(duration, 1000),
-      };
+    if (!this.recordingInstance) {
+      return null;
     }
 
     try {
-      if (!this.recordingInstance) return null;
+      if (this.recordingInstance.type === 'expo-audio') {
+        const recorder = this.recordingInstance.instance;
+        this.recordingInstance = null;
+        await recorder.stop();
+        const uri = recorder.uri;
+        const durationSec = recorder.currentTime || 0;
+        if (!uri) return null;
+        return {
+          uri,
+          durationMs: Math.max(Math.round(durationSec * 1000), 1000),
+        };
+      }
 
-      await this.recordingInstance.stopAndUnloadAsync();
-      const uri = this.recordingInstance.getURI();
-      const status = await this.recordingInstance.getStatusAsync();
-      this.recordingInstance = null;
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-      });
-
-      if (!uri) return null;
-
-      return {
-        uri,
-        durationMs: status.durationMillis || 0,
-      };
+      if (this.recordingInstance.type === 'expo-av') {
+        const recording = this.recordingInstance.instance;
+        this.recordingInstance = null;
+        await recording.stopAndUnloadAsync();
+        const uri = recording.getURI();
+        const status = await recording.getStatusAsync();
+        const Audio = getAudio();
+        if (Audio?.setAudioModeAsync) {
+          await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+        }
+        if (!uri) return null;
+        return {
+          uri,
+          durationMs: status.durationMillis || 0,
+        };
+      }
     } catch (e) {
       console.warn('Failed to stop audio recording:', e);
+      this.recordingInstance = null;
       return null;
     }
+
+    return null;
   },
 
   async playAudio(uri: string, onFinish?: () => void): Promise<boolean> {

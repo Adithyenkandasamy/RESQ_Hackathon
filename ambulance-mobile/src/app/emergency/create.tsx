@@ -158,11 +158,26 @@ export default function CreateEmergencyScreen() {
 
     try {
       const audioResult = await MediaService.stopAudioRecording();
-      if (audioResult) {
-        // Save audio for upload after dispatch; show placeholder
-        setPendingAudio({ uri: audioResult.uri, duration: recordDuration });
-        const voiceTag = `[Voice Note (${recordDuration}s) — will transcribe on dispatch]`;
-        setPatientCondition((prev) => (prev ? `${prev}\n${voiceTag}` : voiceTag));
+      // Transcribe immediately with ElevenLabs and populate text box directly
+      try {
+        const transRes = await EmergenciesApi.directTranscribe(
+          audioResult ? { uri: audioResult.uri, name: 'scene_voice_note.m4a', type: 'audio/m4a' } : undefined
+        );
+        const text = transRes.transcript || transRes.transcription_text || '';
+        if (text.trim()) {
+          setPatientCondition((prev) => (prev ? `${prev}\n${text.trim()}` : text.trim()));
+        } else if (audioResult) {
+          setPendingAudio({ uri: audioResult.uri, duration: recordDuration });
+          const voiceTag = `[Voice Note (${recordDuration}s)]`;
+          setPatientCondition((prev) => (prev ? `${prev}\n${voiceTag}` : voiceTag));
+        }
+      } catch (transErr) {
+        console.warn('Direct transcription fallback:', transErr);
+        if (audioResult) {
+          setPendingAudio({ uri: audioResult.uri, duration: recordDuration });
+          const voiceTag = `[Voice Note (${recordDuration}s)]`;
+          setPatientCondition((prev) => (prev ? `${prev}\n${voiceTag}` : voiceTag));
+        }
       }
     } catch (e: any) {
       Alert.alert('Audio Error', e.message || 'Could not process audio.');
