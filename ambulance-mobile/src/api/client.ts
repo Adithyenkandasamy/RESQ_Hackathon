@@ -6,7 +6,18 @@ const getHostUri = (): string | null => {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Constants = require('expo-constants').default || require('expo-constants');
-    return Constants?.expoConfig?.hostUri || null;
+    const uri =
+      Constants?.expoConfig?.hostUri ||
+      Constants?.expoGoConfig?.debuggerHost ||
+      Constants?.manifest2?.extra?.expoGo?.debuggerHost ||
+      Constants?.manifest?.debuggerHost ||
+      null;
+    if (uri) return uri;
+    if (Constants?.linkingUri) {
+      const match = Constants.linkingUri.match(/:\/\/([^/:]+)/);
+      if (match && match[1]) return match[1];
+    }
+    return null;
   } catch {
     return null;
   }
@@ -33,6 +44,8 @@ const getDefaultBaseUrl = (): string => {
 
 export const API_BASE_URL = getDefaultBaseUrl();
 export const API_V1_URL = `${API_BASE_URL}/api/v1`;
+
+console.log('[API Client] Initialized API_BASE_URL ->', API_BASE_URL);
 
 export class ApiError extends Error {
   constructor(
@@ -95,7 +108,7 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
   let timer: NodeJS.Timeout | null = null;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
-      reject(new ApiError('Request timed out. Please check your network connection.', 408));
+      reject(new ApiError(`Request timed out calling ${url}. Please check your network connection.`, 408));
     }, timeoutMs);
   });
 

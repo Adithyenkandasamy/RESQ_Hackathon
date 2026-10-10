@@ -150,3 +150,9 @@ fastapi_app = create_app()
 
 # The global ASGI application instance combining FastAPI and Socket.IO for uvicorn
 app = socketio.ASGIApp(sio, other_asgi_app=fastapi_app, socketio_path="socket.io")
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+
