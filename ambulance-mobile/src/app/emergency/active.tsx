@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,12 @@ import {
   Linking,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useEmergency } from '../../context/EmergencyContext';
 import { EmergencyStatus } from '../../types/emergency';
+import { EmergenciesApi } from '../../api/emergencies';
 import { StatusBadge } from '../../components/StatusBadge';
 import { AppButton } from '../../components/AppButton';
 import { ScreenHeader } from '../../components/ScreenHeader';
@@ -27,6 +29,11 @@ import {
   AlertCircle,
   RefreshCw,
   ArrowRight,
+  HeartPulse,
+  ShieldAlert,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react-native';
 
 function getNextAction(status: EmergencyStatus): {
@@ -64,6 +71,27 @@ export default function ActiveEmergencyScreen() {
     clearActiveEmergency,
   } = useEmergency();
   const [updating, setUpdating] = useState(false);
+  const [firstAid, setFirstAid] = useState<{
+    protocol_title: string;
+    guidance_steps: string[];
+    critical_precautions: string[];
+  } | null>(null);
+  const [loadingFirstAid, setLoadingFirstAid] = useState(false);
+  const [helperExpanded, setHelperExpanded] = useState(true);
+
+  useEffect(() => {
+    if (activeEmergency?.id) {
+      setLoadingFirstAid(true);
+      EmergenciesApi.getFirstAidGuidance(activeEmergency.id)
+        .then((data) => {
+          if (data && data.guidance_steps && data.guidance_steps.length > 0) {
+            setFirstAid(data);
+          }
+        })
+        .catch((err) => console.warn('Could not load first-aid guidance:', err))
+        .finally(() => setLoadingFirstAid(false));
+    }
+  }, [activeEmergency?.id]);
 
   if (!activeEmergency) {
     return (
@@ -142,6 +170,83 @@ export default function ActiveEmergencyScreen() {
             />
           </View>
         )}
+
+        {/* ── AI Patient Handling & First-Aid Protocol Helper ── */}
+        <View style={styles.aiHelperCard}>
+          <TouchableOpacity
+            style={styles.aiHelperHeader}
+            onPress={() => setHelperExpanded((prev) => !prev)}
+            activeOpacity={0.8}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+              <View style={styles.aiIconBox}>
+                <Sparkles size={16} color="#006194" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.aiHelperTitle}>AI Patient Care Helper</Text>
+                  <View style={styles.aiBadge}>
+                    <Text style={styles.aiBadgeText}>CLINICAL PROTOCOL</Text>
+                  </View>
+                </View>
+                <Text style={styles.aiHelperSubtitle} numberOfLines={1}>
+                  {firstAid?.protocol_title || 'Analyzing scene triage & stabilization...'}
+                </Text>
+              </View>
+            </View>
+            {helperExpanded ? (
+              <ChevronUp size={20} color={Colors.secondaryText} />
+            ) : (
+              <ChevronDown size={20} color={Colors.secondaryText} />
+            )}
+          </TouchableOpacity>
+
+          {helperExpanded && (
+            <View style={styles.aiHelperBody}>
+              {loadingFirstAid ? (
+                <View style={{ paddingVertical: 16, alignItems: 'center', gap: 6 }}>
+                  <ActivityIndicator size="small" color="#006194" />
+                  <Text style={Typography.caption}>Loading patient handling guidelines...</Text>
+                </View>
+              ) : firstAid && firstAid.guidance_steps.length > 0 ? (
+                <>
+                  <Text style={styles.sectionHeaderLabel}>STABILIZATION & HANDLING STEPS:</Text>
+                  {firstAid.guidance_steps.map((step, idx) => (
+                    <View key={idx} style={styles.guidanceStepRow}>
+                      <View style={styles.stepBadgeNumber}>
+                        <Text style={styles.stepBadgeText}>{idx + 1}</Text>
+                      </View>
+                      <Text style={styles.guidanceStepText}>{step}</Text>
+                    </View>
+                  ))}
+
+                  {firstAid.critical_precautions && firstAid.critical_precautions.length > 0 && (
+                    <View style={styles.precautionsBox}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <ShieldAlert size={14} color="#DC2626" />
+                        <Text style={styles.precautionsTitle}>CRITICAL PRECAUTIONS</Text>
+                      </View>
+                      {firstAid.critical_precautions.map((prec, pIdx) => (
+                        <Text key={pIdx} style={styles.precautionItem}>
+                          • {prec}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
+                </>
+              ) : (
+                <View style={{ paddingVertical: 8 }}>
+                  <Text style={Typography.bodySmall}>
+                    • Ensure airway, breathing, and circulation (ABC) are continuously monitored.
+                  </Text>
+                  <Text style={[Typography.bodySmall, { marginTop: 4 }]}>
+                    • Keep patient warm and stable during transit. Do not move spine if neck injury is suspected.
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
 
         {/* Confirmed Hospital or Matching Notice */}
         {confirmedHospital ? (
@@ -336,6 +441,112 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: BorderRadius.md,
     backgroundColor: Colors.primaryBlue,
+  },
+  aiHelperCard: {
+    backgroundColor: '#F0F9FF',
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: '#0284C7',
+    marginBottom: Spacing.md,
+    overflow: 'hidden',
+    ...Shadows.card,
+  },
+  aiHelperHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.md,
+    backgroundColor: '#E0F2FE',
+  },
+  aiIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#BAE6FD',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiHelperTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0369A1',
+  },
+  aiBadge: {
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  aiBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  aiHelperSubtitle: {
+    fontSize: 11,
+    color: '#0284C7',
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  aiHelperBody: {
+    padding: Spacing.md,
+    backgroundColor: '#FFFFFF',
+  },
+  sectionHeaderLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    color: '#0369A1',
+    marginBottom: Spacing.sm,
+  },
+  guidanceStepRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: Spacing.sm,
+    gap: 8,
+  },
+  stepBadgeNumber: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#0284C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  stepBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  guidanceStepText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  precautionsBox: {
+    marginTop: Spacing.sm,
+    padding: Spacing.sm,
+    backgroundColor: '#FEF2F2',
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  precautionsTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#DC2626',
+    letterSpacing: 0.5,
+  },
+  precautionItem: {
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '600',
+    color: '#991B1B',
+    marginTop: 2,
   },
   hospitalCard: {
     backgroundColor: Colors.cardBackground,

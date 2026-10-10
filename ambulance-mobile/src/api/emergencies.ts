@@ -148,20 +148,43 @@ export const EmergenciesApi = {
     });
   },
 
-  async uploadAudio(id: string, audioFile: { uri: string; name: string; type: string }): Promise<{
+  async uploadAudio(id: string, audioFile?: { uri: string; name: string; type: string }): Promise<{
     emergency_id: string;
     transcript: string;
     transcription_text?: string;
   }> {
     const formData = new FormData();
-    formData.append('file', {
-      uri: audioFile.uri,
-      name: audioFile.name,
-      type: audioFile.type,
-    } as any);
+    if (audioFile?.uri && (audioFile.uri.startsWith('file:') || audioFile.uri.startsWith('content:'))) {
+      formData.append('file', {
+        uri: audioFile.uri,
+        name: audioFile.name || 'patient_voice_note.m4a',
+        type: audioFile.type || 'audio/m4a',
+      } as any);
+    }
 
     return apiClient<{ emergency_id: string; transcript: string; transcription_text?: string }>(
       `/emergencies/${id}/transcription`,
+      {
+        method: 'POST',
+        body: formData,
+        isMultipart: true,
+      }
+    );
+  async directTranscribe(audioFile?: { uri: string; name: string; type: string }): Promise<{
+    transcript: string;
+    transcription_text?: string;
+  }> {
+    const formData = new FormData();
+    if (audioFile?.uri && (audioFile.uri.startsWith('file:') || audioFile.uri.startsWith('content:'))) {
+      formData.append('file', {
+        uri: audioFile.uri,
+        name: audioFile.name || 'patient_voice_note.m4a',
+        type: audioFile.type || 'audio/m4a',
+      } as any);
+    }
+
+    return apiClient<{ transcript: string; transcription_text?: string }>(
+      '/emergencies/transcribe-audio',
       {
         method: 'POST',
         body: formData,

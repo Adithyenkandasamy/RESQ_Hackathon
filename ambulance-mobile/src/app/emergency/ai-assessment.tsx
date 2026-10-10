@@ -98,13 +98,14 @@ export default function AIAssessmentScreen() {
         name: 'scene_recording.m4a',
         type: 'audio/m4a',
       });
-      setTranscription(transRes.transcription_text);
+      const transcribed = transRes.transcript || transRes.transcription_text || '';
+      setTranscription(transcribed || null);
 
       // 2. Extract clinical entities with Groq
-      if (transRes.transcription_text) {
+      if (transcribed) {
         const extractRes = await EmergenciesApi.extractEntities(
           activeEmergency.id,
-          transRes.transcription_text
+          transcribed
         );
         setClinicalEntities(extractRes.extractions);
       }

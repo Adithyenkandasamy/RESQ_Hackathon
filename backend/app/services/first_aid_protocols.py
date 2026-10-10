@@ -129,4 +129,4 @@ def find_approved_protocol(incident_type: str) -> dict[str, Any] | None:
     if any(kw in normalized for kw in seizure_keywords):
         return APPROVED_PROTOCOLS["SEIZURE"]
 
-    return APPROVED_PROTOCOLS.get("TRAUMA")
+    return None
