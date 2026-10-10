@@ -207,20 +207,29 @@ export const EmergenciesApi = {
     });
   },
 
-  async getFirstAidGuidance(id: string, condition: string): Promise<{
-    emergency_id: string;
+  async getFirstAidGuidance(id: string, condition?: string): Promise<{
+    protocol_title: string;
     protocol_name: string;
+    guidance_steps: string[];
     steps: string[];
+    critical_precautions: string[];
     critical_warnings: string[];
+    disclaimer?: string;
   }> {
-    return apiClient<{
-      emergency_id: string;
-      protocol_name: string;
-      steps: string[];
-      critical_warnings: string[];
-    }>(`/emergencies/${id}/ai/first-aid`, {
+    const res = await apiClient<any>(`/emergencies/${id}/ai/first-aid`, {
       method: 'POST',
-      body: { condition },
     });
+    const steps = res.guidance_steps || res.steps || [];
+    const precautions = res.critical_precautions || res.critical_warnings || [];
+    const title = res.protocol_title || res.protocol_name || 'Clinical Care Protocol';
+    return {
+      protocol_title: title,
+      protocol_name: title,
+      guidance_steps: steps,
+      steps: steps,
+      critical_precautions: precautions,
+      critical_warnings: precautions,
+      disclaimer: res.disclaimer,
+    };
   },
 };

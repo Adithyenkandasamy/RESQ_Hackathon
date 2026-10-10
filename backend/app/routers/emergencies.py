@@ -1104,7 +1104,13 @@ async def get_emergency_first_aid_guidance(
 
     await _check_emergency_access(emergency, current_user, session)
 
-    guidance = await generate_first_aid(emergency.incident_type)
+    context_text = " ".join(filter(None, [
+        emergency.incident_type,
+        emergency.incident_description,
+        (emergency.patient_info or {}).get("condition_description", ""),
+        (emergency.transcription or {}).get("transcript", ""),
+    ]))
+    guidance = await generate_first_aid(context_text or emergency.incident_type)
     return FirstAidGuidanceResponse.model_validate(guidance.model_dump())
 
 

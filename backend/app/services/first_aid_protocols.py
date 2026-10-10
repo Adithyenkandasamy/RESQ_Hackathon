@@ -98,9 +98,35 @@ APPROVED_PROTOCOLS: dict[str, dict[str, Any]] = {
 
 
 def find_approved_protocol(incident_type: str) -> dict[str, Any] | None:
-    """Select approved first-aid protocol by incident type."""
+    """Select approved first-aid protocol by incident type or clinical context keywords."""
     normalized = incident_type.strip().upper()
     for key, protocol in APPROVED_PROTOCOLS.items():
         if key in normalized:
             return protocol
-    return None
+
+    # Keyword mappings for real-world field descriptions
+    trauma_keywords = [
+        "ACCIDENT", "CRASH", "BIKE", "FALL", "BLEED", "HEMORRHAGE", "CUT",
+        "INJURY", "WOUND", "FRACTURE", "HIT", "MOTOR", "ROAD", "COLLISION",
+        "HEAD", "LEG", "SCRA", "TRAUMA", "விபத்து", "காயம்", "விழுந்"
+    ]
+    if any(kw in normalized for kw in trauma_keywords):
+        return APPROVED_PROTOCOLS["TRAUMA"]
+
+    cardiac_keywords = ["CARDIAC", "HEART", "CHEST", "CPR", "PULSE", "ARREST", "UNRESPONSIVE", "BREATH"]
+    if any(kw in normalized for kw in cardiac_keywords):
+        return APPROVED_PROTOCOLS["CARDIAC"]
+
+    stroke_keywords = ["STROKE", "PARALYSIS", "SPEECH", "FAST", "FACIAL", "DROOP", "NUMB"]
+    if any(kw in normalized for kw in stroke_keywords):
+        return APPROVED_PROTOCOLS["STROKE"]
+
+    burn_keywords = ["BURN", "FIRE", "SCALD", "ACID", "THERMAL", "ELECTRICAL"]
+    if any(kw in normalized for kw in burn_keywords):
+        return APPROVED_PROTOCOLS["BURN"]
+
+    seizure_keywords = ["SEIZURE", "CONVULSION", "EPILEPSY", "FITS", "JERK"]
+    if any(kw in normalized for kw in seizure_keywords):
+        return APPROVED_PROTOCOLS["SEIZURE"]
+
+    return APPROVED_PROTOCOLS.get("TRAUMA")
