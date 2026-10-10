@@ -93,12 +93,22 @@ export function LoginPage() {
             />
 
             {errors.root && (
-              <p
+              <div
                 role="alert"
-                className="rounded-md border border-[#FCA5A5] bg-[#FEE2E2] px-3 py-2 text-[13px] text-[#ba1a1a] font-medium"
+                className={cn(
+                  "rounded-md border px-3 py-2.5 text-[13px] font-medium",
+                  errors.root.message?.toLowerCase().includes("pending")
+                    ? "border-[#FDE68A] bg-[#FEF3C7] text-[#92400E]"
+                    : "border-[#FCA5A5] bg-[#FEE2E2] text-[#ba1a1a]"
+                )}
               >
-                {errors.root.message}
-              </p>
+                <p>{errors.root.message}</p>
+                {errors.root.message?.toLowerCase().includes("pending") && (
+                  <p className="mt-1.5 text-[12px] text-[#78350F]">
+                    Tip: You can sign in with the Administrator account (<strong>admin@ercs.org</strong> / <strong>Admin123!</strong>) to review and approve the hospital application.
+                  </p>
+                )}
+              </div>
             )}
 
             <button

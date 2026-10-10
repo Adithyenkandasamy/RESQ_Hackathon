@@ -47,6 +47,15 @@ describe("mapValidationErrors", () => {
 });
 
 describe("extractErrorMessage", () => {
+  it("extracts error.message from backend envelope", () => {
+    const error = makeAxiosError(409, {
+      error: { code: "CONFLICT", message: "Hospital with identifier 'HOSP-01' already exists." },
+    });
+    expect(extractErrorMessage(error)).toBe(
+      "Hospital with identifier 'HOSP-01' already exists."
+    );
+  });
+
   it("extracts string detail", () => {
     const error = makeAxiosError(401, { detail: "Invalid email or password." });
     expect(extractErrorMessage(error)).toBe("Invalid email or password.");
@@ -57,6 +66,13 @@ describe("extractErrorMessage", () => {
       detail: [{ msg: "field required" }, { msg: "bad email" }],
     });
     expect(extractErrorMessage(error)).toBe("field required; bad email");
+  });
+
+  it("extracts details string array from backend", () => {
+    const error = makeAxiosError(422, {
+      details: ["body → name: Field required"],
+    });
+    expect(extractErrorMessage(error)).toBe("body → name: Field required");
   });
 
   it("falls back to Error.message for non-axios error", () => {

@@ -103,16 +103,29 @@ export function mapValidationErrors(
   error: AxiosError
 ): Record<string, string> {
   const result: Record<string, string> = {};
-  const data = error.response?.data as
-    | { detail: { loc: (string | number)[]; msg: string }[] }
-    | undefined;
+  const data = error.response?.data as any;
 
-  if (!data?.detail || !Array.isArray(data.detail)) return result;
-
-  for (const ve of data.detail) {
-    const field = ve.loc.filter((s) => s !== "body").join(".");
-    result[field] = ve.msg;
+  if (data?.detail && Array.isArray(data.detail)) {
+    for (const ve of data.detail) {
+      const field = ve.loc.filter((s: unknown) => s !== "body").join(".");
+      result[field] = ve.msg;
+    }
   }
+
+  if (data?.details && Array.isArray(data.details)) {
+    for (const item of data.details) {
+      if (typeof item === "string") {
+        const parts = item.split(":");
+        const prefix = parts[0]?.trim();
+        const msg = parts.slice(1).join(":").trim() || item;
+        const field = prefix.split("→").pop()?.trim();
+        if (field) {
+          result[field] = msg;
+        }
+      }
+    }
+  }
+
   return result;
 }
 
@@ -121,11 +134,16 @@ export function mapValidationErrors(
  */
 export function extractErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
-    const data = error.response?.data;
+    const data = error.response?.data as any;
+    if (typeof data?.error?.message === "string") return data.error.message;
     if (typeof data?.detail === "string") return data.detail;
     if (Array.isArray(data?.detail)) {
-      return data.detail.map((v: { msg: string }) => v.msg).join("; ");
+      return data.detail.map((v: { msg?: string } | string) => (typeof v === "string" ? v : v.msg || "")).filter(Boolean).join("; ");
     }
+    if (Array.isArray(data?.details)) {
+      return data.details.filter(Boolean).join("; ");
+    }
+    if (typeof data?.message === "string") return data.message;
     if (error.message) return error.message;
   }
   if (error instanceof Error) return error.message;
