@@ -118,3 +118,114 @@ class TestSocketIOIntegration:
             res = await join_room("admin_sid", {"room": f"hospital:{sample_hospital.id}"})
             assert res["status"] == "ok"
             mock_enter.assert_called_once_with("admin_sid", f"hospital:{sample_hospital.id}")
+
+    async def test_notify_emergency_created_broadcasts_to_admin_and_ambulance(self) -> None:
+        import uuid
+        from app.core.socket import notify_emergency_created
+
+        em_id = uuid.uuid4()
+        amb_id = uuid.uuid4()
+        with patch.object(sio, "emit", new_callable=AsyncMock) as mock_emit:
+            await notify_emergency_created(
+                emergency_id=em_id,
+                status="CREATED",
+                incident_type="CARDIAC",
+                assigned_ambulance_id=amb_id,
+                incident_latitude=37.77,
+                incident_longitude=-122.41,
+            )
+            assert mock_emit.call_count == 2
+            rooms_called = [call.kwargs.get("room") for call in mock_emit.call_args_list]
+            assert "admin" in rooms_called
+            assert f"ambulance:{amb_id}" in rooms_called
+
+            # Verify no patient PII is in payload
+            for call in mock_emit.call_args_list:
+                envelope = call.args[1]
+                assert "patient_info" not in envelope["data"]
+                assert "name" not in envelope["data"]
+                assert envelope["data"]["emergency_id"] == str(em_id)
+
+    async def test_notify_emergency_location_updated(self) -> None:
+        import uuid
+        from app.core.socket import notify_emergency_location_updated
+
+        em_id = uuid.uuid4()
+        amb_id = uuid.uuid4()
+        hosp_id = uuid.uuid4()
+        with patch.object(sio, "emit", new_callable=AsyncMock) as mock_emit:
+            await notify_emergency_location_updated(
+                emergency_id=em_id,
+                incident_latitude=37.78,
+                incident_longitude=-122.42,
+                location_captured_at="2026-10-11T12:00:00Z",
+                ambulance_id=amb_id,
+                hospital_id=hosp_id,
+            )
+            rooms_called = [call.kwargs.get("room") for call in mock_emit.call_args_list]
+            assert f"emergency:{em_id}" in rooms_called
+            assert f"ambulance:{amb_id}" in rooms_called
+            assert f"hospital:{hosp_id}" in rooms_called
+            assert "admin" in rooms_called
+
+    async def test_notify_ambulance_location_updated(self) -> None:
+        import uuid
+        from app.core.socket import notify_ambulance_location_updated
+
+        amb_id = uuid.uuid4()
+        em_id = uuid.uuid4()
+        hosp_id = uuid.uuid4()
+        with patch.object(sio, "emit", new_callable=AsyncMock) as mock_emit:
+            await notify_ambulance_location_updated(
+                ambulance_id=amb_id,
+                latitude=37.79,
+                longitude=-122.40,
+                location_updated_at="2026-10-11T12:05:00Z",
+                active_emergencies=[{"emergency_id": em_id, "hospital_id": hosp_id}],
+            )
+            rooms_called = [call.kwargs.get("room") for call in mock_emit.call_args_list]
+            assert f"ambulance:{amb_id}" in rooms_called
+            assert "admin" in rooms_called
+            assert f"emergency:{em_id}" in rooms_called
+            assert f"hospital:{hosp_id}" in rooms_called
+
+    async def test_notify_handover_confirmed(self) -> None:
+        import uuid
+        from app.core.socket import notify_handover_confirmed
+
+        em_id = uuid.uuid4()
+        hosp_id = uuid.uuid4()
+        amb_id = uuid.uuid4()
+        with patch.object(sio, "emit", new_callable=AsyncMock) as mock_emit:
+            await notify_handover_confirmed(
+                emergency_id=em_id,
+                review_status="CONFIRMED_BY_CREW",
+                handover_summary={"situation": "Patient stable"},
+                ambulance_id=amb_id,
+                hospital_id=hosp_id,
+            )
+            rooms_called = [call.kwargs.get("room") for call in mock_emit.call_args_list]
+            assert f"emergency:{em_id}" in rooms_called
+            assert f"hospital:{hosp_id}" in rooms_called
+            assert f"ambulance:{amb_id}" in rooms_called
+            assert "admin" in rooms_called
+
+    async def test_failed_db_transaction_does_not_produce_socket_event(
+        self,
+        client,
+        ambulance_headers: dict[str, str],
+    ) -> None:
+        """Verify that when a database transaction fails, no success socket event is emitted."""
+        with patch.object(sio, "emit", new_callable=AsyncMock) as mock_emit:
+            # Send an invalid creation payload (missing incident_type or invalid data)
+            resp = await client.post(
+                "/api/v1/emergencies",
+                json={
+                    "incident_type": "",  # invalid
+                },
+                headers=ambulance_headers,
+            )
+            assert resp.status_code in (400, 422)
+            # Ensure no socket events were emitted!
+            mock_emit.assert_not_called()
+

@@ -59,7 +59,10 @@ export function HospitalDashboard() {
   const genTotal = availability.general_beds_total ?? 50;
   const opStatus = String(availability.operational_status || "OPEN");
 
-  // 2. Incoming Admission Requests (Ultra-fast 2.5s polling fallback + WebSocket)
+  // 15-second fallback poll only when socket is not connected
+  const pollInterval = socketState === "connected" ? false : 15_000;
+
+  // 2. Incoming Admission Requests
   const {
     data: requests = [],
     isLoading: loadingRequests,
@@ -68,14 +71,14 @@ export function HospitalDashboard() {
   } = useQuery({
     queryKey: ["hospital-requests"],
     queryFn: () => listHospitalRequests(),
-    refetchInterval: 2500,
+    refetchInterval: pollInterval,
   });
 
   // 3. Active Cases (Emergencies assigned to this hospital or active inbound)
   const { data: emergenciesData, isLoading: loadingEmergencies } = useQuery({
     queryKey: ["hospital-active-emergencies"],
     queryFn: () => listEmergencies({ page_size: 50 }),
-    refetchInterval: 3000,
+    refetchInterval: pollInterval,
   });
 
   // Filter pending requests for this hospital

@@ -183,6 +183,8 @@ class HospitalMatchingService:
                     hospital.latitude,
                     hospital.longitude,
                 )
+                if distance > search_radius_km:
+                    continue
                 prox_score = cls.calculate_proximity_score(distance)
             else:
                 distance = 0.0

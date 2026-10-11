@@ -20,7 +20,6 @@ export function HospitalCaseList() {
   const { data: emergenciesData, isLoading } = useQuery({
     queryKey: ["hospital-all-emergencies"],
     queryFn: () => listEmergencies({ page_size: 100 }),
-    refetchInterval: 10000,
   });
 
   // Filter cases confirmed for this hospital (or all if admin)

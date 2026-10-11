@@ -18,7 +18,6 @@ export function HospitalCaseDetail() {
     queryKey: ["emergency-detail", id],
     queryFn: () => getEmergency(id!),
     enabled: Boolean(id),
-    refetchInterval: 5000,
   });
 
   const { data: history = [], isLoading: loadingHistory } = useQuery({

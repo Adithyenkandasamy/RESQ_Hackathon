@@ -10,6 +10,7 @@ class SocketService {
   private currentAmbulanceId: string | null = null;
   private currentEmergencyId: string | null = null;
   private eventHandlers: Map<string, Set<EventHandler>> = new Map();
+  private reconnectHandlers: Set<() => void> = new Set();
 
   async connect(ambulanceId?: string): Promise<void> {
     if (this.socket && this.socket.connected) {
@@ -43,6 +44,13 @@ class SocketService {
       if (this.currentEmergencyId) {
         this.joinRoom(`emergency:${this.currentEmergencyId}`);
       }
+      this.reconnectHandlers.forEach((cb) => {
+        try {
+          cb();
+        } catch (e) {
+          console.warn('Reconnect callback error:', e);
+        }
+      });
     });
 
     this.socket.on('disconnect', () => {
@@ -55,6 +63,10 @@ class SocketService {
       'emergency.status.updated',
       'hospital_request.declined',
       'hospital_request.accepted',
+      'emergency.created',
+      'emergency.location_updated',
+      'emergency.handover_confirmed',
+      'ambulance.location_updated',
     ];
 
     events.forEach((eventName) => {
@@ -94,6 +106,13 @@ class SocketService {
     }
   }
 
+  onReconnect(callback: () => void) {
+    this.reconnectHandlers.add(callback);
+    return () => {
+      this.reconnectHandlers.delete(callback);
+    };
+  }
+
   disconnect() {
     if (this.socket) {
       this.socket.disconnect();
@@ -103,6 +122,7 @@ class SocketService {
     this.currentAmbulanceId = null;
     this.currentEmergencyId = null;
     this.eventHandlers.clear();
+    this.reconnectHandlers.clear();
   }
 
   get connected(): boolean {

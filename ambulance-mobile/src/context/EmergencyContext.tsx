@@ -76,37 +76,109 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [user, ambulance, refreshActiveEmergency]);
 
-  // Listen for real-time Socket.IO updates
+  // Listen for real-time Socket.IO updates and reconnect events
   useEffect(() => {
     const handleHospitalAssigned = async (data: any) => {
-      // Always refresh when we get this event - even if activeEmergency is stale
+      const emId = data?.data?.emergency_id || data?.resource_id;
+      const hospId = data?.data?.hospital_id;
+      const hospName = data?.data?.hospital_name;
+      // Immediately update React state with confirmed hospital without waiting for REST
+      setActiveEmergency((prev) => {
+        if (!prev) return prev;
+        if (emId && prev.id !== emId) return prev;
+        return {
+          ...prev,
+          confirmed_hospital_id: hospId || prev.confirmed_hospital_id,
+          status: 'HOSPITAL_CONFIRMED',
+        };
+      });
+      if (hospId && hospName) {
+        setConfirmedHospital({
+          id: hospId,
+          name: hospName,
+        } as any);
+      }
       await refreshActiveEmergency();
     };
 
     const handleStatusUpdated = async (data: any) => {
-      if (activeEmergency) {
-        await refreshActiveEmergency();
+      const emId = data?.data?.emergency_id || data?.resource_id;
+      const newStatus = data?.data?.new_status;
+      if (newStatus) {
+        // Immediately update React state with new status without waiting for REST
+        setActiveEmergency((prev) => {
+          if (!prev) return prev;
+          if (emId && prev.id !== emId) return prev;
+          if (newStatus === 'HANDOVER_COMPLETED' || newStatus === 'CANCELLED') {
+            return null;
+          }
+          return {
+            ...prev,
+            status: newStatus,
+          };
+        });
+        if (newStatus === 'HANDOVER_COMPLETED' || newStatus === 'CANCELLED') {
+          setConfirmedHospital(null);
+          socketService.setEmergencyRoom(null);
+        }
       }
+      await refreshActiveEmergency();
+    };
+
+    const handleLocationUpdated = (data: any) => {
+      const emId = data?.data?.emergency_id || data?.resource_id;
+      const lat = data?.data?.incident_latitude;
+      const lng = data?.data?.incident_longitude;
+      const capturedAt = data?.data?.location_captured_at;
+      if (lat != null && lng != null) {
+        setActiveEmergency((prev) => {
+          if (!prev) return prev;
+          if (emId && prev.id !== emId) return prev;
+          return {
+            ...prev,
+            incident_latitude: lat,
+            incident_longitude: lng,
+            location_captured_at: capturedAt || prev.location_captured_at,
+          };
+        });
+      }
+    };
+
+    const handleHandoverConfirmed = async () => {
+      setActiveEmergency(null);
+      setConfirmedHospital(null);
+      socketService.setEmergencyRoom(null);
+      await refreshActiveEmergency();
     };
 
     socketService.on('hospital.assigned', handleHospitalAssigned);
     socketService.on('emergency.status.updated', handleStatusUpdated);
+    socketService.on('emergency.location_updated', handleLocationUpdated);
+    socketService.on('emergency.handover_confirmed', handleHandoverConfirmed);
+
+    // Reconnection recovery: fetch authoritative database state when socket reconnects
+    const unsubscribeReconnect = socketService.onReconnect(() => {
+      refreshActiveEmergency();
+    });
 
     return () => {
       socketService.off('hospital.assigned', handleHospitalAssigned);
       socketService.off('emergency.status.updated', handleStatusUpdated);
+      socketService.off('emergency.location_updated', handleLocationUpdated);
+      socketService.off('emergency.handover_confirmed', handleHandoverConfirmed);
+      unsubscribeReconnect();
     };
-  }, [activeEmergency, refreshActiveEmergency]);
+  }, [refreshActiveEmergency]);
 
-  // Polling fallback: refresh every 5s while an emergency is active to pick up
-  // hospital acceptance even when socket events are missed.
+  // Polling fallback: only active when disconnected from Socket.IO
   useEffect(() => {
     if (!activeEmergency) return;
-    // If hospital is not yet confirmed, poll frequently to catch the acceptance
     if (activeEmergency.confirmed_hospital_id) return;
+    if (socketService.connected) return;
+
     const interval = setInterval(() => {
       refreshActiveEmergency();
-    }, 5000);
+    }, 15000);
     return () => clearInterval(interval);
   }, [activeEmergency?.id, activeEmergency?.confirmed_hospital_id, refreshActiveEmergency]);
 

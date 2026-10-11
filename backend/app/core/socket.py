@@ -325,3 +325,112 @@ async def notify_emergency_status_updated(
     if hospital_id:
         await sio.emit("emergency.status.updated", envelope, room=f"hospital:{hospital_id}")
     await sio.emit("emergency.status.updated", envelope, room="admin")
+
+
+async def notify_emergency_created(
+    emergency_id: uuid.UUID,
+    status: str,
+    incident_type: str,
+    assigned_ambulance_id: uuid.UUID | None = None,
+    incident_latitude: float | None = None,
+    incident_longitude: float | None = None,
+) -> None:
+    """Broadcast new emergency creation to admin and assigned ambulance room (no patient PII)."""
+    envelope = create_event_envelope(
+        event_type="emergency.created",
+        resource_id=str(emergency_id),
+        data={
+            "emergency_id": str(emergency_id),
+            "status": status,
+            "incident_type": incident_type,
+            "assigned_ambulance_id": str(assigned_ambulance_id) if assigned_ambulance_id else None,
+            "incident_latitude": incident_latitude,
+            "incident_longitude": incident_longitude,
+        },
+    )
+    await sio.emit("emergency.created", envelope, room="admin")
+    if assigned_ambulance_id:
+        await sio.emit("emergency.created", envelope, room=f"ambulance:{assigned_ambulance_id}")
+
+
+async def notify_emergency_location_updated(
+    emergency_id: uuid.UUID,
+    incident_latitude: float,
+    incident_longitude: float,
+    location_captured_at: str | None = None,
+    ambulance_id: uuid.UUID | None = None,
+    hospital_id: uuid.UUID | None = None,
+) -> None:
+    """Broadcast scene coordinate updates."""
+    envelope = create_event_envelope(
+        event_type="emergency.location_updated",
+        resource_id=str(emergency_id),
+        data={
+            "emergency_id": str(emergency_id),
+            "incident_latitude": incident_latitude,
+            "incident_longitude": incident_longitude,
+            "location_captured_at": location_captured_at,
+        },
+    )
+    await sio.emit("emergency.location_updated", envelope, room=f"emergency:{emergency_id}")
+    if ambulance_id:
+        await sio.emit("emergency.location_updated", envelope, room=f"ambulance:{ambulance_id}")
+    if hospital_id:
+        await sio.emit("emergency.location_updated", envelope, room=f"hospital:{hospital_id}")
+    await sio.emit("emergency.location_updated", envelope, room="admin")
+
+
+async def notify_ambulance_location_updated(
+    ambulance_id: uuid.UUID,
+    latitude: float,
+    longitude: float,
+    location_updated_at: str | None = None,
+    active_emergencies: list[dict[str, Any]] | None = None,
+) -> None:
+    """Broadcast live ambulance coordinates to fleet room, admin, and active emergency subscribers."""
+    envelope = create_event_envelope(
+        event_type="ambulance.location_updated",
+        resource_id=str(ambulance_id),
+        data={
+            "ambulance_id": str(ambulance_id),
+            "latitude": latitude,
+            "longitude": longitude,
+            "location_updated_at": location_updated_at,
+        },
+    )
+    await sio.emit("ambulance.location_updated", envelope, room=f"ambulance:{ambulance_id}")
+    await sio.emit("ambulance.location_updated", envelope, room="admin")
+    if active_emergencies:
+        for em in active_emergencies:
+            em_id = em.get("emergency_id")
+            hosp_id = em.get("hospital_id")
+            if em_id:
+                await sio.emit("ambulance.location_updated", envelope, room=f"emergency:{em_id}")
+            if hosp_id:
+                await sio.emit("ambulance.location_updated", envelope, room=f"hospital:{hosp_id}")
+
+
+async def notify_handover_confirmed(
+    emergency_id: uuid.UUID,
+    review_status: str,
+    handover_summary: dict[str, Any],
+    ambulance_id: uuid.UUID | None = None,
+    hospital_id: uuid.UUID | None = None,
+) -> None:
+    """Broadcast confirmed patient handover to receiving hospital, ambulance, emergency, and admin."""
+    envelope = create_event_envelope(
+        event_type="emergency.handover_confirmed",
+        resource_id=str(emergency_id),
+        data={
+            "emergency_id": str(emergency_id),
+            "review_status": review_status,
+            "handover_summary": handover_summary,
+        },
+    )
+    await sio.emit("emergency.handover_confirmed", envelope, room=f"emergency:{emergency_id}")
+    if hospital_id:
+        await sio.emit("emergency.handover_confirmed", envelope, room=f"hospital:{hospital_id}")
+    if ambulance_id:
+        await sio.emit("emergency.handover_confirmed", envelope, room=f"ambulance:{ambulance_id}")
+    await sio.emit("emergency.handover_confirmed", envelope, room="admin")
+

@@ -10,9 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import require_roles
+from app.core.socket import notify_ambulance_location_updated
 from app.database import get_db_session
 from app.models.ambulance import Ambulance
-from app.models.enums import UserRole
+from app.models.emergency import Emergency
+from app.models.enums import EmergencyStatus, UserRole
 from app.models.user import User
 from app.schemas.ambulance import (
     AmbulanceAvailabilityUpdate,
@@ -136,6 +138,25 @@ async def update_ambulance_location(
 
     await session.commit()
     await session.refresh(ambulance)
+
+    # Broadcast location update to fleet room, admin, and active emergency subscribers
+    active_stmt = select(Emergency.id, Emergency.confirmed_hospital_id).where(
+        Emergency.assigned_ambulance_id == ambulance.id,
+        Emergency.status.notin_([EmergencyStatus.HANDOVER_COMPLETED, EmergencyStatus.CANCELLED]),
+    )
+    active_res = await session.execute(active_stmt)
+    active_rows = active_res.all()
+    active_emergencies = [
+        {"emergency_id": row[0], "hospital_id": row[1]} for row in active_rows
+    ]
+
+    await notify_ambulance_location_updated(
+        ambulance_id=ambulance.id,
+        latitude=ambulance.latitude,
+        longitude=ambulance.longitude,
+        location_updated_at=ambulance.location_updated_at.isoformat() if ambulance.location_updated_at else None,
+        active_emergencies=active_emergencies,
+    )
 
     logger.debug(
         "Ambulance %s GPS location synchronized: lat=%s, lng=%s",

@@ -59,73 +59,236 @@ export function invalidateForSocketEvent(
   payload: SocketEnvelope,
   queryClient: QueryClient
 ): void {
-  const emergencyId = (payload.data as { emergency_id?: string })?.emergency_id;
-  const requestId = (payload.data as { request_id?: string })?.request_id;
+  const data = (payload.data || {}) as Record<string, any>;
+  const emergencyId = data.emergency_id;
+  const requestId = data.request_id;
 
   switch (eventType) {
-    case "hospital_request.created":
+    case "hospital_request.created": {
+      if (requestId) {
+        const item = {
+          id: requestId,
+          emergency_id: emergencyId || "",
+          hospital_id: data.hospital_id || "",
+          status: "PENDING",
+          response_deadline: data.response_deadline || new Date(Date.now() + 60000).toISOString(),
+          created_at: payload.occurred_at || new Date().toISOString(),
+          updated_at: payload.occurred_at || new Date().toISOString(),
+        };
+        const prependReq = (old: any[] | undefined) => {
+          if (!old) return [item];
+          if (old.some((r) => r.id === item.id)) return old;
+          return [item, ...old];
+        };
+        queryClient.setQueryData(["hospitalRequests"], prependReq);
+        queryClient.setQueryData(["hospital-requests"], prependReq);
+      }
       queryClient.invalidateQueries({ queryKey: ["hospitalRequests"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital-requests"] });
       queryClient.invalidateQueries({ queryKey: ["emergencies"] });
       queryClient.invalidateQueries({ queryKey: ["emergencies", "hospital"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital-active-emergencies"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "dashboard"] });
       break;
+    }
 
-    case "hospital_request.accepted":
+    case "hospital_request.accepted": {
+      const updateReqs = (old: any[] | undefined) => {
+        if (!old) return old;
+        return old.map((r) =>
+          r.id === requestId ? { ...r, status: "ACCEPTED" } : r
+        );
+      };
+      queryClient.setQueryData(["hospitalRequests"], updateReqs);
+      queryClient.setQueryData(["hospital-requests"], updateReqs);
+
+      if (emergencyId) {
+        const updateEm = (prev: any) =>
+          prev
+            ? { ...prev, status: "HOSPITAL_CONFIRMED", confirmed_hospital_id: data.hospital_id || prev.confirmed_hospital_id }
+            : prev;
+        queryClient.setQueryData(["emergency", emergencyId], updateEm);
+        queryClient.setQueryData(["emergency-detail", emergencyId], updateEm);
+      }
+
       queryClient.invalidateQueries({ queryKey: ["hospitalRequests"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital-requests"] });
       if (requestId) {
         queryClient.invalidateQueries({ queryKey: ["hospitalRequest", requestId] });
       }
       if (emergencyId) {
         queryClient.invalidateQueries({ queryKey: ["emergency", emergencyId] });
+        queryClient.invalidateQueries({ queryKey: ["emergency-detail", emergencyId] });
         queryClient.invalidateQueries({ queryKey: ["emergencyRequests", emergencyId] });
       }
       queryClient.invalidateQueries({ queryKey: ["emergencies"] });
       queryClient.invalidateQueries({ queryKey: ["emergencies", "hospital"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital-active-emergencies"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "dashboard"] });
       break;
+    }
 
-    case "hospital_request.declined":
+    case "hospital_request.declined": {
+      const updateReqs = (old: any[] | undefined) => {
+        if (!old) return old;
+        return old.map((r) =>
+          r.id === requestId ? { ...r, status: "DECLINED" } : r
+        );
+      };
+      queryClient.setQueryData(["hospitalRequests"], updateReqs);
+      queryClient.setQueryData(["hospital-requests"], updateReqs);
+
       queryClient.invalidateQueries({ queryKey: ["hospitalRequests"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital-requests"] });
       if (requestId) {
         queryClient.invalidateQueries({ queryKey: ["hospitalRequest", requestId] });
       }
       if (emergencyId) {
         queryClient.invalidateQueries({ queryKey: ["emergency", emergencyId] });
+        queryClient.invalidateQueries({ queryKey: ["emergency-detail", emergencyId] });
         queryClient.invalidateQueries({ queryKey: ["emergencyRequests", emergencyId] });
       }
       queryClient.invalidateQueries({ queryKey: ["emergencies"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "dashboard"] });
       break;
+    }
 
-    case "hospital.assigned":
+    case "hospital.assigned": {
       if (emergencyId) {
+        const updateEm = (prev: any) =>
+          prev
+            ? {
+                ...prev,
+                status: "HOSPITAL_CONFIRMED",
+                confirmed_hospital_id: data.hospital_id || prev.confirmed_hospital_id,
+              }
+            : prev;
+        queryClient.setQueryData(["emergency", emergencyId], updateEm);
+        queryClient.setQueryData(["emergency-detail", emergencyId], updateEm);
+
         queryClient.invalidateQueries({ queryKey: ["emergency", emergencyId] });
+        queryClient.invalidateQueries({ queryKey: ["emergency-detail", emergencyId] });
         queryClient.invalidateQueries({ queryKey: ["emergencyRequests", emergencyId] });
         queryClient.invalidateQueries({ queryKey: ["emergencyDestination", emergencyId] });
       }
       queryClient.invalidateQueries({ queryKey: ["emergencies"] });
       queryClient.invalidateQueries({ queryKey: ["emergencies", "hospital"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital-active-emergencies"] });
       queryClient.invalidateQueries({ queryKey: ["hospitalRequests"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "dashboard"] });
       break;
+    }
 
-    case "emergency.status.updated":
-      if (emergencyId) {
+    case "emergency.status.updated": {
+      const newStatus = data.new_status;
+      if (emergencyId && newStatus) {
+        const updateEm = (prev: any) =>
+          prev ? { ...prev, status: newStatus } : prev;
+        queryClient.setQueryData(["emergency", emergencyId], updateEm);
+        queryClient.setQueryData(["emergency-detail", emergencyId], updateEm);
+
+        const updateList = (prev: any) => {
+          if (!prev?.items) return prev;
+          return {
+            ...prev,
+            items: prev.items.map((e: any) =>
+              e.id === emergencyId ? { ...e, status: newStatus } : e
+            ),
+          };
+        };
+        queryClient.setQueryData(["emergencies"], updateList);
+        queryClient.setQueryData(["hospital-active-emergencies"], updateList);
+        queryClient.setQueryData(["hospital-all-emergencies"], updateList);
+
         queryClient.invalidateQueries({ queryKey: ["emergency", emergencyId] });
+        queryClient.invalidateQueries({ queryKey: ["emergency-detail", emergencyId] });
         queryClient.invalidateQueries({ queryKey: ["emergencyHistory", emergencyId] });
       }
       queryClient.invalidateQueries({ queryKey: ["emergencies"] });
       queryClient.invalidateQueries({ queryKey: ["emergencies", "hospital"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital-active-emergencies"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital-all-emergencies"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "dashboard"] });
       break;
+    }
 
-    case "emergency.handover_confirmed":
+    case "emergency.location_updated": {
       if (emergencyId) {
+        const updateEm = (prev: any) =>
+          prev
+            ? {
+                ...prev,
+                incident_latitude: data.incident_latitude,
+                incident_longitude: data.incident_longitude,
+                location_captured_at: data.location_captured_at || prev.location_captured_at,
+              }
+            : prev;
+        queryClient.setQueryData(["emergency", emergencyId], updateEm);
+        queryClient.setQueryData(["emergency-detail", emergencyId], updateEm);
         queryClient.invalidateQueries({ queryKey: ["emergency", emergencyId] });
+        queryClient.invalidateQueries({ queryKey: ["emergency-detail", emergencyId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["emergencies"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital-active-emergencies"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital-all-emergencies"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "dashboard"] });
+      break;
+    }
+
+    case "emergency.handover_confirmed": {
+      if (emergencyId) {
+        const updateEm = (prev: any) =>
+          prev
+            ? {
+                ...prev,
+                status: "HANDOVER_COMPLETED",
+                handover_summary: data.handover_summary || prev.handover_summary,
+              }
+            : prev;
+        queryClient.setQueryData(["emergency", emergencyId], updateEm);
+        queryClient.setQueryData(["emergency-detail", emergencyId], updateEm);
+
+        queryClient.invalidateQueries({ queryKey: ["emergency", emergencyId] });
+        queryClient.invalidateQueries({ queryKey: ["emergency-detail", emergencyId] });
         queryClient.invalidateQueries({ queryKey: ["emergencyHistory", emergencyId] });
       }
       queryClient.invalidateQueries({ queryKey: ["emergencies"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital-active-emergencies"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital-all-emergencies"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "dashboard"] });
       break;
+    }
+
+    case "emergency.created": {
+      queryClient.invalidateQueries({ queryKey: ["emergencies"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital-active-emergencies"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital-all-emergencies"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "dashboard"] });
+      break;
+    }
+
+    case "ambulance.location_updated":
+    case "ambulance.status.updated": {
+      queryClient.invalidateQueries({ queryKey: ["ambulances"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "dashboard"] });
+      break;
+    }
+
+    case "hospital.availability_updated": {
+      queryClient.invalidateQueries({ queryKey: ["myHospital"] });
+      queryClient.invalidateQueries({ queryKey: ["my-hospital"] });
+      queryClient.invalidateQueries({ queryKey: ["hospitals"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "dashboard"] });
+      break;
+    }
 
     default:
       // Unknown event type – conservative fallback: refresh list queries
       queryClient.invalidateQueries({ queryKey: ["hospitalRequests"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital-requests"] });
       queryClient.invalidateQueries({ queryKey: ["emergencies"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "dashboard"] });
       break;
   }
 
@@ -148,6 +311,10 @@ export function notifyForSocketEvent(
   const data = payload.data as Record<string, unknown>;
 
   switch (eventType) {
+    case "emergency.created":
+      addToast("New emergency incident reported.", "info");
+      break;
+
     case "hospital_request.created":
       addToast(
         `Inbound admission request received for emergency incident.`,
@@ -180,6 +347,10 @@ export function notifyForSocketEvent(
           "info"
         );
       }
+      break;
+
+    case "emergency.location_updated":
+      addToast("Incident scene location updated.", "info");
       break;
 
     case "emergency.handover_confirmed":
@@ -233,10 +404,21 @@ export function createHospitalSocket(options: CreateSocketOptions): Socket | nul
 
   const roomName = user.hospital_id ? `hospital:${user.hospital_id}` : "admin";
 
+  const refreshAllQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["hospitalRequests"] });
+    queryClient.invalidateQueries({ queryKey: ["hospital-requests"] });
+    queryClient.invalidateQueries({ queryKey: ["emergencies"] });
+    queryClient.invalidateQueries({ queryKey: ["hospital-active-emergencies"] });
+    queryClient.invalidateQueries({ queryKey: ["hospital-all-emergencies"] });
+    queryClient.invalidateQueries({ queryKey: ["myHospital"] });
+    queryClient.invalidateQueries({ queryKey: ["my-hospital"] });
+    queryClient.invalidateQueries({ queryKey: ["admin", "dashboard"] });
+  };
+
   socket.on("connect", () => {
     onStateChange?.("connected");
 
-    // Join authorized hospital room
+    // Join authorized room
     socket.emit("join_room", { room: roomName }, (res?: { status: string }) => {
       if (res?.status === "error") {
         console.warn("Failed to join room:", roomName);
@@ -244,9 +426,7 @@ export function createHospitalSocket(options: CreateSocketOptions): Socket | nul
     });
 
     // Authoritative REST refresh after connecting or reconnecting
-    queryClient.invalidateQueries({ queryKey: ["hospitalRequests"] });
-    queryClient.invalidateQueries({ queryKey: ["emergencies"] });
-    queryClient.invalidateQueries({ queryKey: ["myHospital"] });
+    refreshAllQueries();
   });
 
   socket.on("disconnect", (reason) => {
@@ -268,20 +448,23 @@ export function createHospitalSocket(options: CreateSocketOptions): Socket | nul
   socket.on("reconnect", () => {
     onStateChange?.("connected");
     socket.emit("join_room", { room: roomName });
-    queryClient.invalidateQueries({ queryKey: ["hospitalRequests"] });
-    queryClient.invalidateQueries({ queryKey: ["emergencies"] });
-    queryClient.invalidateQueries({ queryKey: ["myHospital"] });
+    refreshAllQueries();
   });
 
   // ── Event subscriptions ───────────────────────────────────────────────────
 
   const eventNames = [
+    "emergency.created",
+    "emergency.status.updated",
+    "emergency.location_updated",
+    "emergency.handover_confirmed",
     "hospital_request.created",
     "hospital_request.accepted",
     "hospital_request.declined",
     "hospital.assigned",
-    "emergency.status.updated",
-    "emergency.handover_confirmed",
+    "ambulance.location_updated",
+    "ambulance.status.updated",
+    "hospital.availability_updated",
   ] as const;
 
   eventNames.forEach((eventName) => {

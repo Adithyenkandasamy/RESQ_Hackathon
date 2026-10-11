@@ -519,4 +519,56 @@ describe("Disconnection, Reconnection Banner & 15-second Polling Fallback", () =
       expect(screen.getByText(/live updates active/i)).toBeInTheDocument();
     });
   });
+
+  it("updates React Query state immediately when socket events arrive without waiting for REST", () => {
+    const qc = makeQueryClient();
+    qc.setQueryData(["emergency", "emg-999"], {
+      id: "emg-999",
+      status: "SEARCHING_HOSPITAL",
+      incident_latitude: 37.77,
+      incident_longitude: -122.41,
+    });
+
+    // Fire emergency.status.updated
+    invalidateForSocketEvent(
+      "emergency.status.updated",
+      {
+        event_id: "evt-stat-1",
+        event_type: "emergency.status.updated",
+        occurred_at: new Date().toISOString(),
+        resource_id: "emg-999",
+        data: {
+          emergency_id: "emg-999",
+          new_status: "ARRIVED",
+        },
+      },
+      qc
+    );
+
+    const updatedEmergency = qc.getQueryData<any>(["emergency", "emg-999"]);
+    expect(updatedEmergency?.status).toBe("ARRIVED");
+
+    // Fire emergency.location_updated
+    invalidateForSocketEvent(
+      "emergency.location_updated",
+      {
+        event_id: "evt-loc-1",
+        event_type: "emergency.location_updated",
+        occurred_at: new Date().toISOString(),
+        resource_id: "emg-999",
+        data: {
+          emergency_id: "emg-999",
+          incident_latitude: 37.85,
+          incident_longitude: -122.50,
+          location_captured_at: "2026-10-11T12:30:00Z",
+        },
+      },
+      qc
+    );
+
+    const updatedLoc = qc.getQueryData<any>(["emergency", "emg-999"]);
+    expect(updatedLoc?.incident_latitude).toBe(37.85);
+    expect(updatedLoc?.incident_longitude).toBe(-122.50);
+  });
 });
+

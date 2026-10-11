@@ -16,7 +16,10 @@ from sqlalchemy.orm import selectinload
 from app.config import get_settings
 from app.core.auth import get_current_user
 from app.core.socket import (
+    notify_emergency_created,
+    notify_emergency_location_updated,
     notify_emergency_status_updated,
+    notify_handover_confirmed,
     notify_hospital_request_created,
 )
 from app.database import get_db_session
@@ -324,6 +327,16 @@ async def create_emergency(
     )
     reloaded = (await session.execute(stmt_reload)).scalar_one()
 
+    # Emit Socket.IO event AFTER commit
+    await notify_emergency_created(
+        emergency_id=emergency.id,
+        status=emergency.status.value,
+        incident_type=emergency.incident_type,
+        assigned_ambulance_id=emergency.assigned_ambulance_id,
+        incident_latitude=emergency.incident_latitude,
+        incident_longitude=emergency.incident_longitude,
+    )
+
     # Trigger post-booking AI background task asynchronously
     background_tasks.add_task(_run_post_booking_ai, emergency.id)
     background_tasks.add_task(_run_hospital_matching_bg, emergency.id)
@@ -537,6 +550,16 @@ async def update_location(
     await session.commit()
     await session.refresh(emergency)
 
+    # Emit Socket.IO location update event AFTER commit
+    await notify_emergency_location_updated(
+        emergency_id=emergency.id,
+        incident_latitude=emergency.incident_latitude,
+        incident_longitude=emergency.incident_longitude,
+        location_captured_at=emergency.location_captured_at.isoformat() if emergency.location_captured_at else None,
+        ambulance_id=emergency.assigned_ambulance_id,
+        hospital_id=emergency.confirmed_hospital_id,
+    )
+
     logger.info("Location updated for emergency %s by user %s", emergency.id, current_user.id)
     return _build_emergency_response(emergency)
 
@@ -609,6 +632,14 @@ async def update_status(
 
     await session.commit()
     await session.refresh(emergency)
+
+    # Emit Socket.IO status updated event AFTER commit
+    await notify_emergency_status_updated(
+        emergency_id=emergency.id,
+        new_status=target_status.value,
+        ambulance_id=emergency.assigned_ambulance_id,
+        hospital_id=emergency.confirmed_hospital_id,
+    )
 
     logger.info(
         "Status transitioned for emergency %s: %s -> %s by user %s",
@@ -1349,23 +1380,19 @@ async def confirm_handover_summary(
 
     await session.commit()
 
-    # Emit real-time notification to confirmed hospital room if hospital is confirmed
-    if emergency.confirmed_hospital_id:
-        from app.core.socket import create_event_envelope, sio
-
-        envelope = create_event_envelope(
-            event_type="emergency.handover_confirmed",
-            resource_id=str(emergency.id),
-            data={
-                "emergency_id": str(emergency.id),
-                "review_status": summary_data["review_status"],
-                "handover_summary": summary_data,
-            },
-        )
-        await sio.emit(
-            "emergency.handover_confirmed",
-            envelope,
-            room=f"hospital:{emergency.confirmed_hospital_id}",
-        )
+    # Emit real-time status update & handover confirmation after commit
+    await notify_emergency_status_updated(
+        emergency_id=emergency.id,
+        new_status=EmergencyStatus.HANDOVER_COMPLETED.value,
+        ambulance_id=emergency.assigned_ambulance_id,
+        hospital_id=emergency.confirmed_hospital_id,
+    )
+    await notify_handover_confirmed(
+        emergency_id=emergency.id,
+        review_status=summary_data["review_status"],
+        handover_summary=summary_data,
+        ambulance_id=emergency.assigned_ambulance_id,
+        hospital_id=emergency.confirmed_hospital_id,
+    )
 
     return HandoverSummaryResponse.model_validate(summary_data)

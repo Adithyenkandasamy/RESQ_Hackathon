@@ -5,9 +5,9 @@
  * Uses the shared design system (AppShell, PageHeader, Skeleton, EmptyState, ErrorState).
  */
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { AppShell } from "../../components/AppShell";
 import { PageHeader } from "../../components/PageHeader";
@@ -16,6 +16,12 @@ import { Skeleton } from "../../components/Skeleton";
 import { ErrorState } from "../../components/ErrorState";
 import { getAdminDashboard } from "../../api/admin";
 import { extractErrorMessage } from "../../api/client";
+import { useAuth } from "../../auth/AuthContext";
+import { useToast } from "../../components/Toast";
+import {
+  createHospitalSocket,
+  type SocketConnectionState,
+} from "../../lib/socket";
 import type { AdminDashboardResponse, EmergencyStatus } from "../../api/types";
 
 const STATUS_ORDER: EmergencyStatus[] = [
@@ -32,6 +38,27 @@ const STATUS_ORDER: EmergencyStatus[] = [
 ];
 
 export function AdminDashboard() {
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { addToast } = useToast();
+  const [socketState, setSocketState] = useState<SocketConnectionState>("connecting");
+
+  // Real-time Socket.IO connection for admin room
+  useEffect(() => {
+    if (!user || user.role !== "ADMIN") return;
+    const socket = createHospitalSocket({
+      user,
+      queryClient,
+      addToast,
+      onStateChange: setSocketState,
+    });
+    return () => {
+      socket?.disconnect();
+    };
+  }, [user, queryClient, addToast]);
+
+  const pollInterval = socketState === "connected" ? false : 15_000;
+
   const {
     data,
     isLoading,
@@ -41,6 +68,7 @@ export function AdminDashboard() {
   } = useQuery<AdminDashboardResponse>({
     queryKey: ["admin", "dashboard"],
     queryFn: getAdminDashboard,
+    refetchInterval: pollInterval,
   });
 
   return (
@@ -49,6 +77,24 @@ export function AdminDashboard() {
         <PageHeader
           title="Admin Dashboard"
           subtitle="Operational overview of hospitals, ambulances, and active emergencies."
+          actions={
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 rounded-full border border-outline-variant bg-white px-2.5 py-1 text-xs font-medium shadow-2xs">
+                <span className={`h-2 w-2 rounded-full ${socketState === "connected" ? "bg-[#16A34A] animate-pulse" : "bg-[#16A34A]"}`} />
+                <span className="text-navy text-[11px] font-semibold">
+                  {socketState === "connected" ? "Real-time Live" : "Live Active"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => refetch()}
+                className="flex items-center gap-2 rounded border border-outline-variant bg-white px-3 py-1.5 text-xs font-semibold text-navy hover:bg-surface-container transition-colors shadow-2xs"
+                title="Refresh Metrics"
+              >
+                Refresh
+              </button>
+            </div>
+          }
         />
 
         {/* Summary metrics */}

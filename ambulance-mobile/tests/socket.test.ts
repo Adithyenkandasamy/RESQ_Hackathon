@@ -17,4 +17,25 @@ describe('Socket.IO Real-time Connection & Room Tests', () => {
     // Service state updated safely without throwing
     expect(true).toBe(true);
   });
+
+  test('onReconnect registers callback and allows unsubscribing', () => {
+    const cb = jest.fn();
+    const unsub = socketService.onReconnect(cb);
+    expect(cb).not.toHaveBeenCalled();
+    unsub();
+  });
+
+  test('socketService forwards emergency.location_updated and handover_confirmed', () => {
+    const locHandler = jest.fn();
+    const handoverHandler = jest.fn();
+    socketService.on('emergency.location_updated', locHandler);
+    socketService.on('emergency.handover_confirmed', handoverHandler);
+
+    expect(locHandler).not.toHaveBeenCalled();
+    expect(handoverHandler).not.toHaveBeenCalled();
+
+    socketService.off('emergency.location_updated', locHandler);
+    socketService.off('emergency.handover_confirmed', handoverHandler);
+  });
 });
+
