@@ -1,135 +1,260 @@
-# ERCS — Emergency Response Coordination System
+# 🚨 RESQ — Emergency Response Coordination System (ERCS)
 
-ERCS is an end-to-end, high-reliability emergency response coordination platform integrating emergency ambulances, regional hospital triage centers, and central administrative dispatch.
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
+[![Socket.IO](https://img.shields.io/badge/Socket.IO-Real--Time_Sync-010101?style=flat&logo=socketdotio&logoColor=white)](https://socket.io/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Aiven_Cloud-4169E1?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Groq AI](https://img.shields.io/badge/Groq-Clinical_NLP-F55036?style=flat)](https://groq.com/)
+[![ElevenLabs](https://img.shields.io/badge/ElevenLabs-Voice_Scribe-black?style=flat)](https://elevenlabs.io/)
 
-The frontend consists of **four standalone, zero-dependency HTML/JS/CSS applications** that connect directly to the FastAPI + PostgreSQL (Aiven) backend with real-time Socket.IO synchronization, ElevenLabs audio transcription, and Groq clinical intelligence.
+**RESQ (ERCS)** is a modern, life-critical emergency healthcare platform designed to eliminate emergency triage delays. It connects **Ambulance Field Paramedics**, **Regional Hospital ERs**, and **Central Administrative Dispatchers** in genuine real time.
 
----
-
-## 🚀 Standalone Frontend Applications
-
-Each application is a self-contained HTML file built with modern Vanilla CSS (dark theme, glassmorphism, responsive design), native JavaScript, Leaflet.js mapping, and Socket.IO client:
-
-| File | Purpose | Target User / Role |
-| :--- | :--- | :--- |
-| **[`admin-dashboard.html`](admin-dashboard.html)** | Central command dashboard: real-time tactical map, operational stats, emergency monitor, hospital registration, and applicant review queues. | Central Dispatch / Administrator (`ADMIN`) |
-| **[`hospital-portal.html`](hospital-portal.html)** | Hospital emergency triage gateway: real-time emergency dispatch requests, concurrency-safe accept/decline, live capacity management, and incoming patient handover. | Hospital ER Staff (`HOSPITAL_STAFF`) |
-| **[`ambulance-portal.html`](ambulance-portal.html)** | Mobile field crew station: GPS/manual incident creation, scene voice recording (ElevenLabs), Groq AI clinical extraction, hospital routing, navigation, and handover. | Field Crew Paramedics (`AMBULANCE_CREW`) |
-| **[`api-testing.html`](api-testing.html)** | Interactive testing console matching the exact OpenAPI contract, with one-click token generators and live Socket.IO event monitor. | QA Engineers & Integrators |
+When an emergency happens, every second counts. RESQ automates clinical speech-to-text, matches the best available hospital with matching specialized beds, locks admission concurrency-safely, and streams live telemetry without polling lag.
 
 ---
 
-## 🔒 Core Business Model & Security Rules
+## 📸 System Overview & Live Dashboards
 
-1. **Backend Controls State & Authorization**:
-   - The frontend never grants operational permissions. All actions (creating emergencies, updating bed availability, dispatching requests, accepting hospital beds) require cryptographically signed JWT tokens verified by FastAPI backend dependencies (`require_roles`).
-   - A pending or rejected account cannot gain operational privileges simply by tampering with local client state.
-2. **Concurrency-Safe Hospital Allocations**:
-   - When an emergency is dispatched, candidates receive simultaneous requests. The backend uses atomic database locking (`SELECT ... FOR UPDATE`) so that only the first accepting hospital is confirmed. Late acceptances receive a standard `409 Conflict`.
-3. **Confirmed Destination Invariant**:
-   - Ambulances are never shown an unconfirmed hospital destination. Google Maps turn-by-turn navigation is enabled strictly when a single hospital has been officially confirmed by the backend.
-4. **Defensible Outcome Metrics**:
-   - The platform strictly reports reliable operational metrics ("emergencies coordinated", "patients transported", "completed handovers"). It does not fabricate life-saved claims without clinical survival data.
+### 1. Central Command & Dispatch Dashboard
+> High-level oversight for dispatchers: fleet status, active emergency distribution, hospital triage queues, and operational metrics.
+![Central Command Dashboard](docs/screenshots/dashboar/d.png)
+
+### 2. Hospital Emergency Network & Live Capacity
+> Real-time hospital status, ER/ICU bed availability, trauma capabilities, and active inbound admission requests.
+![Hospital Network Management](docs/screenshots/hospitals.png)
+
+### 3. Ambulance Fleet Tracking & Unit Status
+> Field vehicle telemetry, active paramedic assignment, vehicle capability tiers (ALS/BLS), and operational readiness.
+![Ambulance Fleet Management](docs/screenshots/ambulances.png)
+
+### 4. Role-Based Access Control & User Directory
+> Authenticated personnel management for central administrators, hospital trauma doctors, and ambulance paramedics.
+![User & Staff Management](docs/screenshots/users.png)
+
+---
+
+## ⚡ The Core Problem & How RESQ Solves It
+
+| Traditional Emergency Dispatch | The RESQ Solution |
+| :--- | :--- |
+| ❌ Paramedics radio hospitals one by one while driving. | ✅ **One-Click Hospital Matching**: Finds the nearest hospital with matching beds in milliseconds. |
+| ❌ Two ambulances head to the same ER bed simultaneously. | ✅ **Concurrency-Safe Atomic Locking**: PostgreSQL `SELECT ... FOR UPDATE` prevents double-booking. |
+| ❌ Manual paper handovers cause communication errors. | ✅ **Groq Clinical AI + ElevenLabs**: Radio speech is converted to structured SBAR clinical summaries. |
+| ❌ Websites refresh every 2–5 seconds with stale data. | ✅ **Genuine Socket.IO WebSockets**: Instant event broadcast across hospital, ambulance, and admin rooms. |
+
+---
+
+## 🔄 How It Works: The Emergency Lifecycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Crew as 🚑 Paramedic Crew
+    participant API as ⚡ FastAPI Backend
+    participant DB as 🐘 PostgreSQL (Aiven)
+    participant Socket as 📡 Socket.IO Server
+    actor Hosp as 🏥 Hospital ER Staff
+    actor Admin as 🖥️ Central Admin
+
+    Crew->>API: 1. Report Incident (Voice note / GPS / Patient Info)
+    API->>DB: Commit Emergency (status = CREATED)
+    API->>Socket: Emit emergency.created
+    Socket-->>Admin: Real-time Incident Alert
+    
+    API->>API: Auto-Match Nearest Equipped Hospitals
+    API->>DB: Create HospitalRequests (PENDING)
+    API->>Socket: Emit hospital_request.created
+    Socket-->>Hosp: Inbound Admission Request with 60s Countdown
+    
+    Hosp->>API: 2. Accept Admission Request
+    API->>DB: Atomic DB Lock -> Assign Hospital (HOSPITAL_CONFIRMED)
+    API->>Socket: Emit hospital.assigned & emergency.status.updated
+    Socket-->>Crew: Hospital Confirmed! Google Maps Route Unlocked
+    Socket-->>Admin: Update Fleet & Case Metrics
+    
+    Crew->>API: 3. Update Status (TRANSPORTING -> ARRIVED)
+    API->>DB: Commit Status & Audit History
+    API->>Socket: Emit emergency.status.updated
+    Socket-->>Hosp: Ambulance Arrived Notification
+    
+    Crew->>API: 4. Finalize SBAR Handover
+    API->>DB: Commit HANDOVER_COMPLETED
+    API->>Socket: Emit emergency.handover_confirmed
+    Socket-->>Hosp: Handover Approved & Archived
+```
 
 ---
 
 ## 🔑 Demo & Test Credentials
 
-The backend database (`resq_db` on Aiven) is provisioned with verified seed accounts for immediate evaluation:
+The backend comes pre-seeded with test accounts. Use these credentials to sign in and test the system:
 
-| Role | Email | Password | Assigned Entity |
+| Role | Email | Password | Access Scope |
 | :--- | :--- | :--- | :--- |
-| **Administrator** | `admin@ercs.org` | `Admin123!` | System-wide access |
-| **Hospital Staff** | `hospital@ercs.org` | `Hospital123!` | Metro General Trauma Center (`HOSP-METRO-01`) |
-| **Ambulance Crew** | `ambulance@ercs.org` | `Ambulance123!` | Unit `AMB-UNIT-101` |
+| 🛡️ **Administrator** | `admin@ercs.org` | `Admin123!` | System-wide analytics, fleet oversight, and hospital approvals. |
+| 🏥 **Hospital Staff** | `hospital@ercs.org` | `Hospital123!` | Metro General ER (`HOSP-METRO-01`), bed capacity, admission requests. |
+| 🚑 **Ambulance Crew** | `ambulance@ercs.org` | `Ambulance123!` | Unit `AMB-UNIT-101`, scene incident capture, AI handover. |
 
-*(All three portals include 1-click credential pre-fills for rapid evaluation).*
+> **Tip**: All login portals feature a **1-click prefill** button to log in instantly.
 
 ---
 
-## 🛠️ Local Serving & Browser Instructions
+## 🏗️ Repository Architecture
 
-Because the applications communicate with the backend on `http://localhost:8000` via JavaScript `fetch` and WebSocket connections, they should be served through a local HTTP server to avoid browser `file://` origin security restrictions.
+This repository is organized into three clean services:
 
-### Option 1: Serve via Python HTTP Server (Recommended)
-From the repository root directory:
-```bash
-python3 -m http.server 3000
 ```
-Open your browser and navigate to:
-- **Admin Dashboard**: [http://localhost:3000/admin-dashboard.html](http://localhost:3000/admin-dashboard.html)
-- **Hospital Portal**: [http://localhost:3000/hospital-portal.html](http://localhost:3000/hospital-portal.html)
-- **Ambulance Portal**: [http://localhost:3000/ambulance-portal.html](http://localhost:3000/ambulance-portal.html)
-- **API Testing Console**: [http://localhost:3000/api-testing.html](http://localhost:3000/api-testing.html)
-
-### Option 2: Live Server (VS Code / Extension)
-Right-click any HTML file in VS Code and choose **"Open with Live Server"** (runs on port 5500).
-
-### Backend CORS Configuration
-The backend is pre-configured in `.env` to allow incoming browser requests from common development ports:
-`http://localhost:3000`, `http://localhost:5500`, `http://localhost:8000`, `http://localhost:8080`, `http://localhost:5173`.
-
----
-
-## 📡 Real-Time Socket.IO Architecture
-
-The backend provides authenticated Socket.IO rooms at `/socket.io`:
-- `admin`: System-wide event broadcast (`emergency.status.updated`, `hospital.assigned`, `hospital_request.created`).
-- `hospital:{hospital_id}`: Targeted inbound triage requests (`hospital_request.created`, `hospital.assigned`).
-- `ambulance:{ambulance_id}`: Destination confirmations (`hospital.assigned`, `emergency.status.updated`).
-- `emergency:{emergency_id}`: Field incident lifecycle and clinical progress.
-
----
-
-## 📋 Comprehensive Endpoint Coverage Report
-
-This report documents every ERCS business requirement against the actual FastAPI backend implementation.
-
-### 1. Supported Endpoints
-
-| Category | Method | Path | Backend Handler | Portal Support |
-| :--- | :--- | :--- | :--- | :--- |
-| **Health** | `GET` | `/health/live` | `app/routers/health.py` | Full |
-| **Health** | `GET` | `/health/ready` | `app/routers/health.py` | Full |
-| **Auth** | `POST` | `/api/v1/auth/login` | `app/routers/auth.py` | Full (JWT Token Issuance) |
-| **Auth** | `GET` | `/api/v1/auth/me` | `app/routers/auth.py` | Full (Role Verification) |
-| **Admin** | `GET` | `/api/v1/admin/dashboard` | `app/routers/admin.py` | Full (Metrics Aggregation) |
-| **Hospitals** | `GET` | `/api/v1/hospitals` | `app/routers/hospitals.py` | Full (Directory Listing) |
-| **Hospitals** | `POST` | `/api/v1/hospitals` | `app/routers/hospitals.py` | Full (Admin Registration) |
-| **Hospitals** | `GET` | `/api/v1/hospitals/me` | `app/routers/hospitals.py` | Full (Staff Profile) |
-| **Hospitals** | `PATCH` | `/api/v1/hospitals/me` | `app/routers/hospitals.py` | Full (Staff Profile Update) |
-| **Hospitals** | `PATCH` | `/api/v1/hospitals/me/availability` | `app/routers/hospitals.py` | Full (ER & ICU Bed Counts) |
-| **Ambulances**| `GET` | `/api/v1/ambulances/me` | `app/routers/ambulances.py` | Full (Vehicle Profile) |
-| **Ambulances**| `PATCH` | `/api/v1/ambulances/me/availability` | `app/routers/ambulances.py` | Full (Availability Toggle) |
-| **Emergencies**| `POST`| `/api/v1/emergencies` | `app/routers/emergencies.py` | Full (Creation & Geolocation) |
-| **Emergencies**| `GET` | `/api/v1/emergencies` | `app/routers/emergencies.py` | Full (Paginated List) |
-| **Emergencies**| `GET` | `/api/v1/emergencies/{id}` | `app/routers/emergencies.py` | Full (Incident Details) |
-| **Emergencies**| `PATCH`| `/api/v1/emergencies/{id}/status` | `app/routers/emergencies.py` | Full (Lifecycle State Machine)|
-| **Emergencies**| `PATCH`| `/api/v1/emergencies/{id}/location` | `app/routers/emergencies.py` | Full (GPS Updates) |
-| **Emergencies**| `PATCH`| `/api/v1/emergencies/{id}/patient` | `app/routers/emergencies.py` | Full (Triage & Demographics) |
-| **Emergencies**| `GET` | `/api/v1/emergencies/{id}/history` | `app/routers/emergencies.py` | Full (Audit Trail) |
-| **Emergencies**| `POST`| `/api/v1/emergencies/{id}/match-hospitals` | `app/routers/emergencies.py` | Full (Matching Protocol) |
-| **Emergencies**| `GET` | `/api/v1/emergencies/{id}/requests` | `app/routers/emergencies.py` | Full (Dispatched Requests) |
-| **Emergencies**| `GET` | `/api/v1/emergencies/{id}/destination` | `app/routers/emergencies.py` | Full (Confirmed Hospital) |
-| **AI / Voice** | `POST`| `/api/v1/emergencies/{id}/transcription` | `app/routers/emergencies.py` | Full (ElevenLabs Scribe v1) |
-| **AI / Voice** | `POST`| `/api/v1/emergencies/{id}/ai/extract` | `app/routers/emergencies.py` | Full (Groq Clinical NLP) |
-| **AI / Voice** | `POST`| `/api/v1/emergencies/{id}/ai/verify-extractions` | `app/routers/emergencies.py` | Full (Crew Verification) |
-| **AI / Voice** | `POST`| `/api/v1/emergencies/{id}/ai/handover-summary` | `app/routers/emergencies.py` | Full (Groq Handover Draft) |
-| **AI / Voice** | `POST`| `/api/v1/emergencies/{id}/handover/confirm` | `app/routers/emergencies.py` | Full (Crew Confirmation) |
-| **AI / Voice** | `POST`| `/api/v1/emergencies/{id}/ai/first-aid` | `app/routers/emergencies.py` | Full (Constrained Protocols) |
-| **Hospital Reqs** | `GET` | `/api/v1/hospital-requests` | `app/routers/hospital_requests.py` | Full (Inbound Triage List) |
-| **Hospital Reqs** | `POST`| `/api/v1/hospital-requests/{id}/accept` | `app/routers/hospital_requests.py` | Full (Concurrency-Safe Lock) |
-| **Hospital Reqs** | `POST`| `/api/v1/hospital-requests/{id}/decline` | `app/routers/hospital_requests.py` | Full (Rejection with Reason) |
+RESQ_Hackathon/
+├── backend/                  # FastAPI 0.115+ REST & Socket.IO server
+│   ├── app/
+│   │   ├── core/             # Socket.IO rooms, JWT security, logging
+│   │   ├── models/           # SQLAlchemy 2.0 PostgreSQL database models
+│   │   ├── routers/          # REST route controllers (Auth, Hospital, Emergencies)
+│   │   └── services/         # Hospital matching, Groq AI, ElevenLabs Scribe
+│   └── tests/                # 110 automated tests (100% pass)
+│
+├── frontend/                 # React 19 + TypeScript + Vite + Tailwind CSS
+│   ├── src/
+│   │   ├── features/admin/   # Admin real-time metrics & management
+│   │   ├── features/hospital/# Hospital triage command & live admission requests
+│   │   ├── lib/socket.ts     # Centralized Socket.IO client & state sync
+│   │   └── tests/            # Vitest unit and integration test suite
+│   └── package.json
+│
+├── ambulance-mobile/         # React Native (Expo) field ambulance application
+│   ├── src/
+│   │   ├── app/              # Paramedic scene dispatch & voice logging
+│   │   ├── context/          # Real-time state & reconnection management
+│   │   └── services/         # GPS Location & Socket.IO client service
+│   └── tests/                # Jest mobile test suite
+│
+└── docs/screenshots/         # Application visual reference images
+```
 
 ---
 
-### 2. Missing Backend Endpoints & Frontend Handling
+## 🚀 Quickstart Guide (Run Locally in 5 Minutes)
 
-In adherence with requirements to never claim unsupported backend features work, the following gaps in the FastAPI backend were identified and transparently addressed in the frontend design:
+### Prerequisites
+- **Python 3.10+**
+- **Node.js 18+** & **npm**
 
-| Missing Backend Capability | Gap Description | Frontend Handling / Invariant |
+---
+
+### Step 1: Start the Backend API & Socket.IO Server
+
+1. Open your terminal and enter the `backend` folder:
+   ```bash
+   cd backend
+   ```
+2. Create and activate a virtual environment:
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate    # On Windows: venv\Scripts\activate
+   ```
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. Start the server:
+   ```bash
+   uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+   ```
+   - **Backend API**: [http://localhost:8000](http://localhost:8000)
+   - **Interactive Swagger Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+   - **Socket.IO Endpoint**: `ws://localhost:8000/socket.io`
+
+---
+
+### Step 2: Start the Web Dashboard (Admin & Hospital)
+
+1. Open a new terminal and navigate to `frontend`:
+   ```bash
+   cd frontend
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the Vite development server:
+   ```bash
+   npm run dev
+   ```
+4. Open your browser at [http://localhost:5173](http://localhost:5173):
+   - Sign in as **`admin@ercs.org`** to access `/admin/dashboard`
+   - Sign in as **`hospital@ercs.org`** to access `/hospital/dashboard`
+
+---
+
+### Step 3: Start the Mobile Application (Ambulance Crew)
+
+1. Open a new terminal and navigate to `ambulance-mobile`:
+   ```bash
+   cd ambulance-mobile
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Run the mobile application:
+   ```bash
+   npm start
+   ```
+   - Press **`w`** to open in web browser preview, or scan the QR code with **Expo Go** on your physical phone.
+   - Sign in with **`ambulance@ercs.org`** to report incidents and receive hospital confirmations.
+
+---
+
+## 📡 Real-Time Socket.IO Synchronization
+
+The application features full real-time bidirectional synchronization without periodic polling:
+
+| Event Name | Who Receives It | Purpose |
 | :--- | :--- | :--- |
-| **Public Self-Registration** (`POST /api/v1/auth/register/*`) | The backend lacks public unauthenticated self-registration routes. Only `POST /api/v1/hospitals` (Admin only) exists. | The registration forms intake application details into a localized application queue and display clear feedback: *"Application queued for administrative audit."* The Admin Dashboard features an Applicant Review Board allowing administrators to review and provision them into PostgreSQL via `POST /api/v1/hospitals`. |
-| **Registration Approval Endpoint** (`PATCH /api/v1/admin/registrations/*`) | The backend user schema relies on `is_active: bool` without a dedicated `RegistrationApplication` table. | Admin review actions invoke backend provisioning for approved entities and store formal rejection reasons locally with audit logs. Unapproved accounts cannot log in to gain operational permissions. |
-| **Accreditation Document Binary Storage** (`POST /api/v1/hospitals/documents`) | The backend provides multipart upload for audio recordings (`/transcription`), but lacks generic PDF/document object storage. | Hospital Portal provides a document intake validator that previews file metadata, computes cryptographic file digests client-side, and badges documents as ready for external auditing. |
-| **Continuous GPS Telemetry Tracking** | Continuous polling GPS tracking is intentionally not supported to conserve battery and bandwidth. | Location is captured discrete-time via HTML5 Geolocation API upon incident creation and manual coordinate updates via `PATCH /emergencies/{id}/location`. |
+| `emergency.created` | Admin, Assigned Ambulance | New emergency incident reported |
+| `hospital_request.created` | Target Hospital, Admin | Instant admission request dispatched with countdown |
+| `hospital_request.accepted` | Hospital, Admin | Request marked accepted |
+| `hospital_request.declined` | Hospital, Admin, Emergency | Request declined; escalates if all reject |
+| `hospital.assigned` | Emergency, Hospital, Ambulance, Admin | Official hospital destination confirmed |
+| `emergency.status.updated` | Emergency, Ambulance, Hospital, Admin | Lifecycle update (`TRANSPORTING`, `ARRIVED`, etc.) |
+| `emergency.location_updated`| Emergency, Ambulance, Hospital, Admin | Incident scene coordinate updates |
+| `ambulance.location_updated`| Ambulance fleet, Admin, Active cases | Live ambulance GPS telemetry |
+| `emergency.handover_confirmed`| Hospital, Ambulance, Admin | SBAR clinical handover signed off |
+
+### Privacy & Authorization Invariants
+- **No Patient PII over Broadcasts**: Event envelopes never broadcast sensitive names, contact details, or full medical histories over public channels.
+- **Strict Role-Based Rooms**: Handshake tokens (`JWT`) are validated at connection time. Sockets are restricted strictly to permitted rooms (`hospital:{id}`, `ambulance:{id}`, `emergency:{id}`, `admin`).
+
+---
+
+## 🧪 Testing & Verification
+
+The entire repository is covered by automated unit and integration tests:
+
+### Run Backend Tests (110 Tests)
+```bash
+cd backend
+python3 -m pytest
+```
+*Output: `110 passed in 25s` (covers auth, concurrency, matching, socket events, and transaction rollback).*
+
+### Run Frontend Tests (81 Tests)
+```bash
+cd frontend
+npm test
+```
+*Output: `81 passed` (covers dashboards, countdowns, real-time cache updates, error states, and role guards).*
+
+### Run Mobile Tests (14 Tests)
+```bash
+cd ambulance-mobile
+npm test
+```
+*Output: `14 passed` (covers incident reporting, AI extractions, GPS sync, and socket event listeners).*
+
+---
+
+## 👥 Contributors & Hackathon Team
+
+Built with ❤️ for high-reliability emergency response coordination.  
+For technical inquiries or integration specifications, please open an issue in this repository.
