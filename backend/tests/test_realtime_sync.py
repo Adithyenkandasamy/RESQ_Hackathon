@@ -14,13 +14,10 @@ Validates:
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
-import uuid
+
 import httpx
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.socket import sio
-from app.models.hospital import Hospital
-from app.models.user import User
 
 
 class TestRealTimeSynchronization:

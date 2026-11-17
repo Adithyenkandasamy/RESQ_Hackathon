@@ -121,6 +121,7 @@ class TestSocketIOIntegration:
 
     async def test_notify_emergency_created_broadcasts_to_admin_and_ambulance(self) -> None:
         import uuid
+
         from app.core.socket import notify_emergency_created
 
         em_id = uuid.uuid4()
@@ -148,6 +149,7 @@ class TestSocketIOIntegration:
 
     async def test_notify_emergency_location_updated(self) -> None:
         import uuid
+
         from app.core.socket import notify_emergency_location_updated
 
         em_id = uuid.uuid4()
@@ -170,6 +172,7 @@ class TestSocketIOIntegration:
 
     async def test_notify_ambulance_location_updated(self) -> None:
         import uuid
+
         from app.core.socket import notify_ambulance_location_updated
 
         amb_id = uuid.uuid4()
@@ -191,6 +194,7 @@ class TestSocketIOIntegration:
 
     async def test_notify_handover_confirmed(self) -> None:
         import uuid
+
         from app.core.socket import notify_handover_confirmed
 
         em_id = uuid.uuid4()

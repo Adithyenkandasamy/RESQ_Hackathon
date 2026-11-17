@@ -116,6 +116,7 @@ async def extract_observations(raw_text: str) -> EmergencyExtractionResult:
             factual_summary=raw_text[:200] if raw_text else "No observation text provided.",
             model_used="offline-fallback",
             review_required=True,
+            unverified_extracted_address=None,
         )
 
     system_prompt = (
@@ -168,6 +169,7 @@ async def extract_observations(raw_text: str) -> EmergencyExtractionResult:
             factual_summary=raw_text[:200] if raw_text else "Extraction failed.",
             model_used="fallback-on-error",
             review_required=True,
+            unverified_extracted_address=None,
         )
 
 

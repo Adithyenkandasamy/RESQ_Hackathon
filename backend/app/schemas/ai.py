@@ -30,9 +30,8 @@ class ExtractionRequest(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_text_input(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            if "text" not in data and "transcription_text" in data:
-                data["text"] = data["transcription_text"]
+        if isinstance(data, dict) and "text" not in data and "transcription_text" in data:
+            data["text"] = data["transcription_text"]
         return data
 
 

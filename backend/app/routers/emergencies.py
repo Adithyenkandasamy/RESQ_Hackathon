@@ -6,8 +6,18 @@ import logging
 import math
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel
 from sqlalchemy import func, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -900,7 +910,7 @@ async def get_emergency_assignment(
     emergency_id: uuid.UUID,
     session: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any] | ConfirmedAssignmentResponse:
     """Retrieve the authoritative confirmed destination hospital with full details."""
     stmt = select(Emergency).where(Emergency.id == emergency_id)
     emergency = (await session.execute(stmt)).scalar_one_or_none()

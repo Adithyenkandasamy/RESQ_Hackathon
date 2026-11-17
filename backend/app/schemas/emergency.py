@@ -43,13 +43,25 @@ class EmergencyCreate(BaseModel):
     @classmethod
     def normalize_fields(cls, data: Any) -> Any:
         if isinstance(data, dict):
-            if "incident_type" not in data and "severity_level" in data:
+            if (
+                "incident_type" not in data
+                and "severity_level" in data
+            ):
                 data["incident_type"] = data["severity_level"]
-            if "incident_latitude" not in data and "latitude" in data:
+            if (
+                "incident_latitude" not in data
+                and "latitude" in data
+            ):
                 data["incident_latitude"] = data["latitude"]
-            if "incident_longitude" not in data and "longitude" in data:
+            if (
+                "incident_longitude" not in data
+                and "longitude" in data
+            ):
                 data["incident_longitude"] = data["longitude"]
-            if "incident_description" not in data and "location_description" in data:
+            if (
+                "incident_description" not in data
+                and "location_description" in data
+            ):
                 data["incident_description"] = data["location_description"]
         return data
 
@@ -100,10 +112,10 @@ class EmergencyStatusUpdate(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_fields(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            if "reason" not in data and "notes" in data:
-                data["reason"] = data["notes"]
-        return data
+        if isinstance(data, dict) and "reason" not in data and "notes" in data:
+            data["reason"] = data["notes"]
+
+            return data
 
 
 class EmergencyResponse(BaseModel):
